@@ -308,7 +308,7 @@ def combine_outputs(directory_name, fastq_path, slurm_path, output_csv):
     combined_df = pd.concat(
         [mapping_data, slurm_data], axis=0, ignore_index=True)
     combined_df.loc[0, directory_name] = read_count
-
+    
     if directory_name in existing_data.columns:
         print(timenow(),f" Data already exists for {directory_name}, "
             " updating values instead.")
@@ -317,7 +317,7 @@ def combine_outputs(directory_name, fastq_path, slurm_path, output_csv):
         existing_data.to_csv(output_csv, index=False)
     else:
         df_output = pd.concat(
-            [existing_data, combined_df], axis=1, ignore_index=True)
+            [existing_data, combined_df], axis=1)
         df_output.to_csv(output_csv, index=False)
 
     print(timenow(),f" Job completed.")
