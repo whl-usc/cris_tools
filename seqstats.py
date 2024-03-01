@@ -307,8 +307,6 @@ def combine_outputs(directory_name, fastq_path, slurm_path, output_csv):
     slurm_data = split_slurm(slurm_path, directory_name)
     combined_df = pd.concat(
         [mapping_data, slurm_data], axis=0, ignore_index=True)
-
-    print(combined_df)
     combined_df.loc[0, directory_name] = read_count
 
     if directory_name in existing_data.columns:
