@@ -235,8 +235,8 @@ def sort_bam(input_file, max_reads=None):
                                 output_file.write(line)
 
             except Exception as e:
-                error_message = (f"\nERROR: Sub-sampling failed. 
-                    f" Check if file contains reads mapped to 'hs45S' "
+                error_message = (f"\nERROR: Sub-sampling failed."
+                    f" Check if file contains reads mapped to 'hs45S'"
                     f" chromosome.")
                 print(error_message)
 
