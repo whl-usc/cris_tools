@@ -303,6 +303,8 @@ def mosdepth_regions(sorted_bam, annotation, min_coverage=None,
 
     if skip_chromosome:
         skipped = skip_chromosome.split(',')
+    else:
+        skipped = []
 
     with gzip.open('tmp.regions.bed.gz', 'rt') as f:
         for line in f:
@@ -343,7 +345,7 @@ def region_to_bed(covered_genes, gene_regions, output):
                     if gene_name in gene_regions:
                         chrom, start, stop, strand = gene_regions[gene_name]
                         line = (f"{chrom}\t{start}\t{stop}\t "
-                            f" {gene_name}\t1000\t{strand}")
+                            f" {gene_name}\t1000\t{strand}\n")
                         f.write(line)
                         existing_genes.add(gene_name)
 
@@ -689,7 +691,7 @@ Usage examples:
     if analysis_type == "gene":
         if min_coverage is not None and float(min_coverage) < 10:
             print("\nWARNING: Using a low min_coverage value increases" 
-                "analysis time. CTRL + C to cancel now if desired...")
+                " analysis time. CTRL + C to cancel now if desired...")
         try:
             time.sleep(5)
             print("\nContinuing...")
