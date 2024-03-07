@@ -47,8 +47,8 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
     """
     Prepares a "collapsed" gene region containing file by parsing through a 
     modified GTF annotation file. This function was written with the hg38 
-    annotation in mind, but will be updated for other gene annotation files in 
-    future iterations. See help section for details about preparing the 
+    annotation in mind, but will be updated for other gene annotation files
+    in future iterations. See help section for details about preparing the 
     modified annotation.bed from a Gencode GTF file.
 
     Note that this function is hardcoded to filter for any genes that fall 
@@ -107,7 +107,8 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
                     stop = int(parts[2])
                     gene_name = parts[3]
                     strand = parts[4]
-                    gene_regions[gene_name] = (chromosome, start, stop, strand)
+                    gene_regions[gene_name] = 
+                        (chromosome, start, stop, strand)
 
         except Exception as e:
             error_message = (f"\nERROR: Failed to parse annotation.bed. Check"
@@ -155,7 +156,7 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
                 error_message = (f"\nERROR: No annotation file provided.")
             else:
                 error_message = (f"\nERROR: Failed to parse annotation file."
-                    f" Check to see if file exists and is formatted correctly.")
+                    f" Check if file exists and is formatted correctly.")
             print(error_message)
             sys.exit()
 
@@ -176,7 +177,6 @@ def sort_bam(input_file, max_reads=None):
         
     (Optional):
         max_reads: integer, maximum number of reads per gene region.  
-        skip_chromosome: list of chromosomes to skip from the input file.
 
     Returns:
         file: sorted_bam file using samtools.
@@ -205,12 +205,14 @@ def sort_bam(input_file, max_reads=None):
                 is_hs45S = f'awk \'$3 == "hs45S" {{print}}\''
                 hs45S_extract = ['samtools', 'view', sam_to_bam, '|', 
                     is_hs45S, '>', hs45S_reads]
-                subprocess.run(' '.join(hs45S_extract), shell=True, check=True)
+                subprocess.run(' '.join(hs45S_extract), 
+                    shell=True, check=True)
 
                 not_hs45S = f'awk \'$3 != "hs45S" {{print}}\''
                 chrom_extract = ['samtools', 'view', sam_to_bam, '|', 
                     not_hs45S, '>', chrom]
-                subprocess.run(' '.join(chrom_extract), shell=True, check=True)
+                subprocess.run(' '.join(chrom_extract), 
+                    shell=True, check=True)
 
                 with open("hs45S.tmp", 'r') as f:
                     hs45S_reads = f.readlines()
@@ -233,8 +235,9 @@ def sort_bam(input_file, max_reads=None):
                                 output_file.write(line)
 
             except Exception as e:
-                error_message = (f"\nERROR: Sub-sampling failed. Make sure file"
-                    f" contains reads mapped to 'hs45S' chromosome.")
+                error_message = (f"\nERROR: Sub-sampling failed. 
+                    f" Check if file contains reads mapped to 'hs45S' "
+                    f" chromosome.")
                 print(error_message)
 
             finally:
@@ -260,19 +263,22 @@ def sort_bam(input_file, max_reads=None):
 def mosdepth_regions(sorted_bam, annotation, min_coverage=None, 
     skip_chromosome=None):
     """
-    Function that parses the provided sorted_bam file to determine gene regions
-    that meet or exceed minimum coverage as defined by user. Uses mosdepth 
-    functions to determine reads at each gene region, then collects alignments 
-    >= min_coverage. Defining num_cores should speed up the depth calculations, 
-    but benchmarking for mosdepth shows no notable improvement past 4 threads.
+    Function that parses the provided sorted_bam file to determine gene
+    regions that meet or exceed minimum coverage as defined by user. Uses
+    mosdepth functions to determine reads at each gene region, then collects
+    alignments >= min_coverage. Defining num_cores should speed up the depth
+    calculations, but benchmarking for mosdepth shows no notable improvement
+    past 4 threads.
 
     Args:
         sorted_bam:         PATH to BAM file.
         annotation:         bed file that defines the gene regions, derived 
                             from collapse_gene_regions() function.
-        min_coverage:       Integer defining minimum number of reads/nt before 
-                            the region is considered covered.
-
+    (Optional)
+        min_coverage:       Integer defining minimum number of reads/gene
+                            before the region is considered covered.
+        skip_chromosome:    comma separated list of chromosomes to skip 
+                            from the input file.
     Returns:
         covered_genes (list): genes with coverage that exceed min_coverage
     """
@@ -295,9 +301,14 @@ def mosdepth_regions(sorted_bam, annotation, min_coverage=None,
     if min_coverage is None:
         min_coverage = 10
 
+    if skip_chromosome:
+        skipped = skip_chromosome.split(',')
+
     with gzip.open('tmp.regions.bed.gz', 'rt') as f:
         for line in f:
             chrom, start, end, gene, cov_mean = line.strip().split()
+            if chrom in skipped:
+                continue
             if float(cov_mean) >= float(min_coverage):
                 covered_genes.append(gene)
 
@@ -435,21 +446,21 @@ def main():
         description=textwrap.dedent("""\
 ###########################################################################
 
-If used as part of the automated CRSSANT/rna2d3d pipeline, this script must be 
-run in the parent directory where *_pri_crssant.bam is located after mapping is
-completed. Use the 'gene' analysis function. It will process the BAM file
-containing gapped_1 and trans reads, determine highly covered positions based
-on coverage per gene region in the annotation file. Outputs are written to a
-BED6 file, which can then be directly used for CRSSANT DG assembly.
+If used as part of the automated CRSSANT/rna2d3d pipeline, this script must 
+be run in the parent directory where *_pri_crssant.bam is located after 
+mapping is completed. Use the 'gene' analysis function. It will process the 
+BAM file containing gapped_1 and trans reads, determine highly covered 
+positions based on coverage per gene region in the annotation file. Outputs 
+are written to the BED6 file, which can be directly used for DG assembly.
 
 NOTE: Arguments should only be provided in the following order:
 
 1. analysis_type:       Available options: 'gene', 'position'
 
                         Gene region-based uses mean coverage of reads for 
-                        genomic coordinate regions to determine which genes are 
-                        covered above a minimum coverage, writes 'genes' into a 
-                        BED file used for CRSSANT DG assembly. Requires
+                        genomic coordinate regions to determine which genes 
+                        are covered above a minimum coverage, writes 'genes' 
+                        into a BED6 file for CRSSANT DG assembly. Requires
                         annotation file to be specified (see #4 [-a]).
                         
                         Position-based uses read coverage at nucleotide
@@ -457,19 +468,19 @@ NOTE: Arguments should only be provided in the following order:
                         high coverage and plots a histogram for read coverage
                         profile.  
 
-                        See optional arguments list for changing default values.
+                        See optional arguments for changing default values.
 
-2. input (file path):   Intended to be the PATH of the *pri_crssant SAM or BAM 
+2. input (file path):   Intended as PATH of the *pri_crssant SAM or BAM 
                         file generated after the mapping.sh script from the 
-                        rna2d3d pipeline is used. However, any SAM or BAM file 
-                        can be provided to check for read depth.
+                        rna2d3d pipeline is used. However, any SAM or BAM
+                        file can be provided to check for read depth.
 
-3. output (prefix):     Any string to be used for the output file prefix. It is 
-                        recommended to include min_coverage as part of the 
-                        name to specify the cutoff values. Supplying the 
-                        same output filename will append to existing lines. 
+3. output (prefix):     Any string to be used for the output file prefix. 
+                        Recommended to include min_coverage as part of the 
+                        name to specify cutoff values. Supplying the same 
+                        output filename will append to existing lines. 
 
-4. -a, --annotation:    Annotation file (path) containing gene regions in a 
+4. -a, --annotation:    Annotation file (path) containing gene regions in
                         modified GTF format:
 
                         chrom   chrom_start   chrom_end   gene_name   strand
@@ -480,19 +491,19 @@ NOTE: Arguments should only be provided in the following order:
                         zcat gencode.v45.basic.annotation.gtf.gz
                         awk -F'\\t '$3 == "gene" && $9 ~ /gene_type 
                         "protein_coding"/ && $9 !~ /gene_name "ENSG0000"/ 
-                        {split($9, a, "\\""); print $1 "\\t" $4 "\\t" $5 "\\t" 
-                        a[6] "\\t" $7}' > annotation.bed
+                        {split($9, a, "\\""); print $1 "\\t" $4 "\\t" $5 "\\
+                        t" a[6] "\\t" $7}' > annotation.bed
 
                         If providing a pre-made annotation file, the format 
                         must follow the tab-separated columns described above.
 
-                        NOTE: Specific genomic regions or RNAs are defined as a
-                        separate 'chromosome' in the PARIS/SHARC pipelines. 
-                        These must be manually included as separate lines to an
-                        annotation_file. Always check to see if present in the 
-                        output BED6 files generated using this script.
+                        NOTE: Specific genomic regions or RNAs are defined as 
+                        a separate 'chromosome' in the PARIS/SHARC pipelines. 
+                        These must manually be added as separate lines to the 
+                        annotation_file. Always check to see if they are in 
+                        the output BED6 files generated using this script.
 
-                        List of 'genes' added as a separate 'chromosome':
+                        List of genes added as a separate 'chromosome':
                         ---------------------------------
                         RN7SK   1       331     RN7SK   +
                         RN7SL   1       288     RN7SL   +
@@ -544,30 +555,30 @@ OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
 
 -max, --max-reads:      Defaults to [10,000] if no value is provided.
 
-                        Parses provided input BAM file and sets a cutoff for 
-                        the number of rRNA reads allowed for coverage analysis. 
+                        Parses input BAM file and sets a cutoff for 
+                        number of rRNA reads allowed for coverage analysis. 
 
                         Recommended for analysis that contain mostly rRNA
-                        reads, as
-                        this will decrease DG assembly time. Note that the 
-                        'annotation' flag [-a] is a paired, required argument. 
+                        reads, as this will decrease DG assembly time. Note 
+                        that the 'annotation' flag [-a] is a paired argument. 
 
--k, --keep-files:       Retains the mean_coverage analysis intermediary files; 
+-k, --keep-files:       Retains the mean_coverage analysis files; 
                         
                             *.regions.bed.gz*
                             annotation.bed
 
-                        WARNING: Error may occur if using the same intermediary 
-                        file between analysis types. By default, -k is FALSE.
+                        WARNING: Error may occur if using the same file 
+                        between analysis types. By default, -k is FALSE.
                         Provide this argument only when repeating the same
-                        analysis type and changing the min_coverage value.
+                        analysis type and changing values for min_coverage 
+                        or skip_chromosome.
 
 -s, --skip-chromosome:  Provide a list of comma separated chromosomes to 
                         omit when performing the data analysis. Highly 
                         recommended for analyses that do not need rRNA reads,
                         as this will significantly decrease analysis time. 
 
-                            e.g., chr1,chr2,chr3  
+                            -skip=chr1,chr2,chr3  
                         
 -stats, --statistics:   Provides basic statistics of the job as a log file;
                         
@@ -578,18 +589,17 @@ OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
 ###########################################################################
 """),
 usage='''
-\npython3 %(prog)s analysis_type [options] input_file min_coverage \
-    annotation_file output 
+\npython3 %(prog)s analysis_type input output [options]
 
 Usage examples:
     
-- For a gene region-based analysis: 
-    %(prog)s gene input output annotation_file \
-[-min, -max, -stats, -k]\n
+- For gene region-based analysis: 
+    %(prog)s gene input output -a=annotation_file \
+[-min, -max, -skip, -stats, -k]\n
 
-- For a position-based analysis: 
+- For position-based analysis: 
     %(prog)s position input output \
-[-w, -k, -m, -s, -S]\n
+[-w, -max, -skip, -stats, -k]\n
 ''')
 
     # Arguments to be provided in the command line.
@@ -599,32 +609,33 @@ Usage examples:
     parser.add_argument('input', 
         help="Input file in unsorted BAM or SAM format.")
         
-    parser.add_argument('output', help="File prefix name for analysis outputs.")
+    parser.add_argument('output', 
+        help="File prefix name for analysis outputs.")
 
     # Flags, specific to the gene-based analysis.
     parser.add_argument('-a', '--annotation', 
-        help="Annotation file in the modified GTF format. See help text for "
+        help="Annotation file in the modified GTF format. See help text for"
         " more details.")
 
     parser.add_argument('-min', '--min_coverage', 
-        help="Min_coverage is defined as the minimum number of reads for a "
-        " given region before it is considered well covered. Defaults to [10]")
+        help="Min_coverage is defined as minimum number of reads for a region"
+        " before it is considered well covered. Defaults to [10]")
 
     # Optional flags, specific to the position-based analysis.
     parser.add_argument('-w', '--window-size',
-        help="Optional parameter for position-based analysis. Defaults to [20]")
+        help="Optional parameter for position-based analysis."
+        " Defaults to [20]")
 
     # Optional flags, common to either analysis type. Set default values.
     parser.add_argument('-k', '--keep-files', action='store_true', 
         help="Optional parameter to keep the intermediary files.")
 
     parser.add_argument('-max', '--max-reads', 
-        help="Optional parameter to define the maximum number of reads. If "
+        help="Optional parameter to define the maximum number of reads. If"
         " provided, subsamples highly covered gene regions.")
 
-    parser.add_argument('-s', '--skip-chromosome', nargs='?', 
-        help="Optional parameter to skip specified chromosomes during "
-        " processing.")
+    parser.add_argument('-skip', '--skip-chromosome', nargs='?', 
+        help="Optional parameter to skip chromosomes during processing.")
 
     parser.add_argument('-stats', '--statistics', action='store_true', 
         help="Optional parameter to give statistics for the run. Times the" 
@@ -632,7 +643,7 @@ Usage examples:
 
     args = parser.parse_args()
 
-    ###########################################################################
+    ##########################################################################
     # Begin timing the job for the --statistics flag. 
     start_time = time.time()
 
@@ -677,8 +688,8 @@ Usage examples:
 
     if analysis_type == "gene":
         if min_coverage is not None and float(min_coverage) < 10:
-            print("\nWARNING: Using a low min_coverage value increases analysis time. "
-              "CTRL + C to cancel now if desired...")
+            print("\nWARNING: Using a low min_coverage value increases" 
+                "analysis time. CTRL + C to cancel now if desired...")
         try:
             time.sleep(5)
             print("\nContinuing...")
@@ -686,7 +697,7 @@ Usage examples:
             print("\nOperation canceled by user.")
             sys.exit(1)
         covered_genes = mosdepth_regions(sorted_bam, 
-            annotation, min_coverage)
+            annotation, min_coverage, skip_chromosome)
         region_to_bed(covered_genes, gene_regions, output)
 
     # For coverage by nucleotide position, output to histograms.
@@ -709,7 +720,7 @@ Usage examples:
             print(f"  Genes collected: {count}")
         elif analysis_type == "position":
             pass
-            # Fill in a function here, show num_reads or something else useful.
+            # Fill in a function here, show histograms or something useful.
 
     # Remove intermediate files unless -k argument is provided.
     if keep_files == True:
