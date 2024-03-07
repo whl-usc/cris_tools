@@ -23,13 +23,14 @@ import argparse
 import glob
 import gzip
 import os
+import random
 import subprocess
 import sys
 import textwrap
 import time
 
 ###########################################################################
-# 1. Basic functions that can be used for most analyses.
+# 1. Basic functions that common to either analyses function.
 
 def timenow():
     """
@@ -45,10 +46,10 @@ def timenow():
 def collapse_gene_regions(annotation_file, skip_chromosome=None):
     """
     Prepares a "collapsed" gene region containing file by parsing through a 
-    modified GTF annotation file. This function was written with the hg38.bed 
-    in mind, but will be updated for other gene annotation files in future
-    iterations. See the help section for more details about preparing the 
-    modified GTF file from a generic gencode GTF.
+    modified GTF annotation file. This function was written with the hg38 
+    annotation in mind, but will be updated for other gene annotation files in 
+    future iterations. See help section for details about preparing the 
+    modified annotation.bed from a Gencode GTF file.
 
     Note that this function is hardcoded to filter for any genes that fall 
     into the ENCODE blacklist region. In this way, problematic regions of the 
@@ -94,7 +95,7 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
     # Check if the output BED file already exists; check column formatting. 
     if os.path.exists("annotation.bed"):
         try:
-            print(f"\nReading gene regions from 'annotations.bed'.\n")
+            print(f"\nReading gene regions from 'annotations.bed'.")
             gene_regions = {}
             with open("annotation.bed", 'r') as f:
                 for line in f:
@@ -109,123 +110,155 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
                     gene_regions[gene_name] = (chromosome, start, stop, strand)
 
         except Exception as e:
-            error_message = (f"\nError: Failed to parse annotation.bed. Check"
+            error_message = (f"\nERROR: Failed to parse annotation.bed. Check"
                 f" to see if the columns are as defined in the help section.")
             print(error_message)
-            sys.exit(error_message)
+            sys.exit()
 
     else:
-        gene_regions = {}
-        with open(annotation_file, 'r') as f:
-            for line in f:
-                parts = line.split("\t")
-                chromosome = parts[0].strip("'\"")
-                if skip_chromosome and chromosome in skip_chromosome:
-                    continue
-                if chromosome not in valid_chromosomes:
-                    chromosome = chromosome[3:]
-                start = int(parts[1])
-                stop = int(parts[2])
-                strand = parts[3]
-                gene_name = parts[4]
+        try:
+            if annotation_file is not None:
+                print(f"\nSorting gene regions from {annotation_file}" 
+                    f" into 'annotations.bed'...") 
+            gene_regions = {}
+            with open(annotation_file, 'r') as f:
+                for line in f:
+                    parts = line.split("\t")
+                    chromosome = parts[0].strip("'\"")
+                    if skip_chromosome and chromosome in skip_chromosome:
+                        continue
+                    if chromosome not in valid_chromosomes:
+                        chromosome = chromosome[3:]
+                    start = int(parts[1])
+                    stop = int(parts[2])
+                    strand = parts[3]
+                    gene_name = parts[4]
 
-                if (chromosome, start, stop) not in blacklist_regions:
-                    if gene_name not in gene_regions:
-                        gene_regions[gene_name] = (chromosome,
-                            start, stop, strand)
-                    else:
-                        gene_regions[gene_name] = (chromosome,
-                            min(start, gene_regions[gene_name][1]), 
-                            max(stop, gene_regions[gene_name][2]), strand)
+                    if (chromosome, start, stop) not in blacklist_regions:
+                        if gene_name not in gene_regions:
+                            gene_regions[gene_name] = (chromosome,
+                                start, stop, strand)
+                        else:
+                            gene_regions[gene_name] = (chromosome,
+                                min(start, gene_regions[gene_name][1]), 
+                                max(stop, gene_regions[gene_name][2]), strand)
 
-            # Write gene regions to BED file
-            with open("annotation.bed", 'w') as file:
-                for gene_name, gene_info in gene_regions.items():
-                        chromosome, start, stop, strand = gene_info
-                        file.write(
-                            f"{chromosome}\t{start}\t{stop}\t{gene_name}"
-                            f"\t{strand}\n")
+                # Write gene regions to BED file
+                with open("annotation.bed", 'w') as file:
+                    for gene_name, gene_info in gene_regions.items():
+                            chromosome, start, stop, strand = gene_info
+                            file.write(
+                                f"{chromosome}\t{start}\t{stop}\t{gene_name}"
+                                f"\t{strand}\n")
+        except Exception as e:
+            if annotation_file == None:
+                error_message = (f"\nERROR: No annotation file provided.")
+            else:
+                error_message = (f"\nERROR: Failed to parse annotation file."
+                    f" Check to see if file exists and is formatted correctly.")
+            print(error_message)
+            sys.exit()
 
     return gene_regions
 
-def sort_bam(input_file, annotation=None, max_reads=None, skip_chromosome=None):
+def sort_bam(input_file, max_reads=None):
     """
     Checks the input file type, converts to BAM if necessary, 
     then sorts the BAM file for input into the analysis functions.
     Requires samtools packages. 
 
-    If the argument max_reads is passed, a maximum number of randomized reads per given gene region will be pulled from the input file. 
-    Requires the bedtools package.
+    If the argument max_reads is passed, a maximum number of randomized reads
+    per given gene region will be pulled from the input file. 
+    Requires the bedtools package and annotation file.
 
     Args:
         input_file: either a SAM or BAM alignment mapping file.
+        
+    (Optional):
+        max_reads: integer, maximum number of reads per gene region.  
+        skip_chromosome: list of chromosomes to skip from the input file.
 
     Returns:
         file: sorted_bam file using samtools.
     """
     input_prefix = os.path.splitext(input_file)[0]
 
-    if max_reads == None: 
-        sam_to_bam = f"{input_prefix}.bam"
-        sorted_bam = f"{input_prefix}_sorted.bam"
-            
-    else:
-
-        # # WRITE THIS SO THAT IF MAX-READS IS CALLED, ANNOTATION IS NEEDED.
-        # cutoff = int(max_reads)
-
-        # # Check the output of the bedtools intersect and parse for cutoff.
-        # subprocess.run([
-        #     'bedtools', 'bamtobed', 
-        #     '-i', input_file, 'bam_tmp.bed'], shell=True, check=True)
-
-        # subprocess.run([
-        #     'bedtools', 'intersect', 
-        #     '-a', 'annotation.bed', 
-        #     '-b', 'bam_tmp.bed', 
-        #     '>', 'overlaps.bed'], check=True)
-
-        # # Re-write the BAM file with randomized number of reads. numpy.random?
-        # # samtools seed?
-        # subprocess.run([
-        #    'awk',
-        #    '{count[$4]++}',
-        #    'END {for (gene in count) print gene, count[gene]}',
-        #    'overlaps.bed'], capture_output=True, text=True)
-
-        # with open ('bedtools_output', 'r') as f:
-        #     for line in f:
-        #         parts = line.split("\t")
-        #         chromosome = parts[0].strip("'\"")
-
-        # sam_to_bam = f"{input_prefix}_max-{cutoff}.bam"
-        # sorted_bam = f"{input_prefix}_max-{cutoff}_sorted.bam"
-
     try:
         if input_file.endswith(".sam"):
+            sam_to_bam = f"{input_prefix}.bam"
             subprocess.run(['samtools', 'view', '-bS', '-o', 
-                sam_to_bam, input_file])
-            subprocess.run(['samtools', 'sort', '-o', 
-                sorted_bam, sam_to_bam])
-            subprocess.run(['samtools', 'index', sorted_bam])
+                sam_to_bam, input_file], check=True)
 
-        elif input_file.endswith(".bam"):
-            subprocess.run(['samtools', 'sort', '-o', 
-                sorted_bam, input_file])
-            subprocess.run(['samtools', 'index', sorted_bam])
+        else:
+            sam_to_bam = input_file
+            sorted_bam = f"{input_prefix}_low_sorted.bam"
+
+        if max_reads is not None:
+            try:
+                header_file = "header.tmp"
+                hs45S_reads = "hs45S.tmp"
+                chrom = "chrom.tmp"
+                with open(header_file, "w") as header:
+                    subprocess.run(['samtools', 'view', '-H', sam_to_bam], 
+                        stdout=header, check=True)
+
+                is_hs45S = f'awk \'$3 == "hs45S" {{print}}\''
+                hs45S_extract = ['samtools', 'view', sam_to_bam, '|', 
+                    is_hs45S, '>', hs45S_reads]
+                subprocess.run(' '.join(hs45S_extract), shell=True, check=True)
+
+                not_hs45S = f'awk \'$3 != "hs45S" {{print}}\''
+                chrom_extract = ['samtools', 'view', sam_to_bam, '|', 
+                    not_hs45S, '>', chrom]
+                subprocess.run(' '.join(chrom_extract), shell=True, check=True)
+
+                with open("hs45S.tmp", 'r') as f:
+                    hs45S_reads = f.readlines()
+                    hs45S_count = len(hs45S_reads)
+                    print(f"\nSubsampling from {hs45S_count} rRNA reads...")
+                    if hs45S_count > int(max_reads):
+                        hs45S_low = random.sample(hs45S_reads, int(max_reads))
+                    else:
+                        hs45S_low = hs45S_reads
+
+                with open("hs45S_low.tmp", 'w') as f:
+                    f.writelines(hs45S_low)
+
+                sam_to_bam = (f"{input_prefix}_low.bam")
+                out_files = ["header.tmp", "hs45S_low.tmp", "chrom.tmp"]
+                with open(sam_to_bam, 'w') as output_file:
+                    for filename in out_files:
+                        with open(filename, 'r') as input_file:
+                            for line in input_file:
+                                output_file.write(line)
+
+            except Exception as e:
+                error_message = (f"\nERROR: Sub-sampling failed. Make sure file"
+                    f" contains reads mapped to 'hs45S' chromosome.")
+                print(error_message)
+
+            finally:
+                for file in ["header.tmp", "hs45S.tmp", "hs45S_low.tmp",
+                    "chrom.tmp"]:
+                    if os.path.exists(file):
+                        os.remove(file)
+
+        subprocess.run(['samtools', 'sort', '-o', sorted_bam, sam_to_bam])
+        subprocess.run(['samtools', 'index', sorted_bam])
 
     except Exception as e:
-        error_message = f("\nError: Failed to parse the provided file input."
+        error_message = (f"\nERROR: Failed to parse the provided file input."
             f" Check to see if file format is correct. Details: {e}.")
         print(error_message)
-        sys.exit(error_message)
-
+        sys.exit()       
+    
     return sorted_bam
 
 ###########################################################################
-# 2. Coverage depth calculations 
+# 2. Gene region based analysis - calculation and writing out. 
 
-def mosdepth_regions(sorted_bam, annotation, min_coverage):
+def mosdepth_regions(sorted_bam, annotation, min_coverage=None, 
+    skip_chromosome=None):
     """
     Function that parses the provided sorted_bam file to determine gene regions
     that meet or exceed minimum coverage as defined by user. Uses mosdepth 
@@ -245,7 +278,7 @@ def mosdepth_regions(sorted_bam, annotation, min_coverage):
     """
     covered_genes = []
     if os.path.exists('tmp.regions.bed.gz'):
-        print(f"Mean coverage summary already exists. Using for calculations.")
+        print(f"\nMean coverage summary exists. Using for calculations...")
         
     else:            
         if os.cpu_count() >= 4:
@@ -259,19 +292,57 @@ def mosdepth_regions(sorted_bam, annotation, min_coverage):
                         'tmp', sorted_bam]
         subprocess.run(mosdepth_args, check=True)
 
+    if min_coverage is None:
+        min_coverage = 10
+
     with gzip.open('tmp.regions.bed.gz', 'rt') as f:
         for line in f:
             chrom, start, end, gene, cov_mean = line.strip().split()
-            if cov_mean >= min_coverage:
+            if float(cov_mean) >= float(min_coverage):
                 covered_genes.append(gene)
 
     return covered_genes
 
+def region_to_bed(covered_genes, gene_regions, output):
+    """
+    Reads the return from region based analysis to write output to file.
+
+    Args:
+        covered_genes (list):   List of genes that have high_coverage_regions.
+        gene_regions (dict):    Dictionary of all genomic regions from the
+                                annotation file.
+        output (str):           PATH to the output BED file. 
+
+    Returns:
+        None
+    """
+    mode = 'a' if os.path.exists(output+'.bed') else 'w'
+
+    existing_genes = set()
+    if mode =='a':
+        with open(output+'.bed', 'r') as f:
+            for line in f:
+                gene_name = line.split('\t')[3].strip()
+                existing_genes.add(gene_name)
+
+    with open(output+'.bed', mode, newline='') as f:
+        for gene_name in covered_genes:
+            if gene_name not in existing_genes:
+                if "tRNA" not in gene_name: 
+                    if gene_name in gene_regions:
+                        chrom, start, stop, strand = gene_regions[gene_name]
+                        line = (f"{chrom}\t{start}\t{stop}\t "
+                            f" {gene_name}\t1000\t{strand}")
+                        f.write(line)
+                        existing_genes.add(gene_name)
+
+###########################################################################
+# 2. Position based analysis - calculation and plotting to histograms. 
+
 # RE-WRITE THIS FUNCTION SO THAT IT PLOTS A HISTOGRAM WITH THE OUTPUT
 # INSTEAD OF USING THE SAME FILE FOR GENES.BED
 
-# def mosdepth_positions(sorted_bam, annotation, min_coverage, 
-#     gene_regions, window_size=None):
+# def mosdepth_positions(sorted_bam, window_size=None):
 #     """
 #     Function that parses the provided sorted_bam file to determine positions
 #     that meet or exceed minimum coverage as defined by user. Uses mosdepth
@@ -325,40 +396,6 @@ def mosdepth_regions(sorted_bam, annotation, min_coverage):
 
 #     return covered_positions
 
-def region_to_bed(covered_genes, gene_regions, output):
-    """
-    Reads the return from region based analysis to write output to file.
-
-    Args:
-        covered_genes (list):   List of genes that have high_coverage_regions.
-        gene_regions (dict):    Dictionary of all genomic regions from the
-                                annotation file.
-        output (str):           PATH to the output BED file. 
-
-    Returns:
-        None
-    """
-    mode = 'a' if os.path.exists(output) else 'w'
-
-    existing_genes = set()
-    if mode =='a':
-        with open(output, 'r') as f:
-            for line in f:
-                gene_name = line.split('\t')[3].strip()
-                existing_genes.add(gene_name)
-
-    with open(output, mode, newline='') as f:
-        for gene_name in covered_genes:
-            if gene_name not in existing_genes:
-                if "tRNA" not in gene_name: 
-                    if gene_name in gene_regions:
-                        chrom, start, stop, strand = gene_regions[gene_name]
-                        line = (f"{chrom}\t{start}\t{stop}\t "
-                            f" {gene_name}\t1000\t{strand}")
-                        f.write(line)
-                        existing_genes.add(gene_name)
-
-
 # RE-WRITE THIS FUNCTION. MAKE IT GENERATE A HISTOGRAM INSTEAD.
 # def position_to_bed(covered_positions, output):
 #     """
@@ -389,7 +426,7 @@ def region_to_bed(covered_genes, gene_regions, output):
 #                     existing_genes.add(gene_name)
 
 ###########################################################################
-# 3. Main, defining accepted arguments. 
+# 3. Main, define accepted arguments. 
 
 def main():
     parser = argparse.ArgumentParser(
@@ -398,27 +435,29 @@ def main():
         description=textwrap.dedent("""\
 ###########################################################################
 
-If used as part of the automated CRSSANT/rna2d3d pipeline, this script would
-best be run in the parent directory where *_pri_crssant.bam is located after 
-the mapping script completes. It will process the BAM file that contains 
-gapped_1 and trans reads, determining highly covered positions based on either 
-the read coverage per region defined in a user-provided annotation file, or 
-positions that fall within a user-provided window-size. Outputs are written to 
-a BED6 file, which can then be directly used for CRSSANT DG assembly. 
+If used as part of the automated CRSSANT/rna2d3d pipeline, this script must be 
+run in the parent directory where *_pri_crssant.bam is located after mapping is
+completed. Use the 'gene' analysis function. It will process the BAM file
+containing gapped_1 and trans reads, determine highly covered positions based
+on coverage per gene region in the annotation file. Outputs are written to a
+BED6 file, which can then be directly used for CRSSANT DG assembly.
 
 NOTE: Arguments should only be provided in the following order:
 
-1. analysis_type:       Options are 'gene' OR 'position'. 
+1. analysis_type:       Available options: 'gene', 'position'
 
-                        Gene region-based analysis uses the mean coverage of 
-                        reads for a specific gene region to determine which
-                        genes are highly covered and writes to the 'genes.bed'
-                        used in CRSSANT DG assembly. 
+                        Gene region-based uses mean coverage of reads for 
+                        genomic coordinate regions to determine which genes are 
+                        covered above a minimum coverage, writes 'genes' into a 
+                        BED file used for CRSSANT DG assembly. Requires
+                        annotation file to be specified (see #4 [-a]).
                         
-                        Position-based analysis uses the read coverage at 
-                        nucleotides positions of n=<window_size> to determine
-                        regions of high coverage and plots a histogram for read 
-                        coverage profile. See options [-c, -w, -m]. 
+                        Position-based uses read coverage at nucleotide
+                        positions of n=<window_size> to determine regions of 
+                        high coverage and plots a histogram for read coverage
+                        profile.  
+
+                        See optional arguments list for changing default values.
 
 2. input (file path):   Intended to be the PATH of the *pri_crssant SAM or BAM 
                         file generated after the mapping.sh script from the 
@@ -430,25 +469,7 @@ NOTE: Arguments should only be provided in the following order:
                         name to specify the cutoff values. Supplying the 
                         same output filename will append to existing lines. 
 
-4. min_coverage (int):  Integer value defines the minimum number of reads for
-                        each analysis_type. Default value of min_coverage is 
-                        (10) with default window_size (1), unless option [-w]
-                        is specified. 
-
-                        This value is recommended to be changed according to 
-                        the dataset. Start with a larger value and decrease to 
-                        include genes with lower coverage.
-
-                        For 'gene' based analysis, it defines the minimum mean 
-                        number of reads for a genomic region before being
-                        considered high coverage.
-
-                        For 'position' based analysis, it sets the cutoff for
-                        minimum number of reads at any given nucleotide 
-                        position within the window (1 unless [-w]) before 
-                        being considered a highly covered position.
-
-4. annotation (file):   Annotation file (path) containing gene regions in a 
+4. -a, --annotation:    Annotation file (path) containing gene regions in a 
                         modified GTF format:
 
                         chrom   chrom_start   chrom_end   gene_name   strand
@@ -463,17 +484,15 @@ NOTE: Arguments should only be provided in the following order:
                         a[6] "\\t" $7}' > annotation.bed
 
                         If providing a pre-made annotation file, the format 
-                        must be correct and the file re-named "annotation.bed".
-                        If working with PARIS/SHARC pipeline data, see below.
+                        must follow the tab-separated columns described above.
 
                         NOTE: Specific genomic regions or RNAs are defined as a
                         separate 'chromosome' in the PARIS/SHARC pipelines. 
-                        These must be manually included as separate lines in
-                        the annotation_file. Check to see if present in the
+                        These must be manually included as separate lines to an
+                        annotation_file. Always check to see if present in the 
                         output BED6 files generated using this script.
 
-                        Example 'genes' as a separate 'chromosome':
-
+                        List of 'genes' added as a separate 'chromosome':
                         ---------------------------------
                         RN7SK   1       331     RN7SK   +
                         RN7SL   1       288     RN7SL   +
@@ -505,32 +524,33 @@ NOTE: Arguments should only be provided in the following order:
                         hssnRNA 1934    2058    U6atac  +
                         ---------------------------------
 
+OPTIONAL ARGUMENTS: SPECIFIC TO GENE-BASED ANALYSIS
+
+-min, --min_coverage:   Defaults to [10] if no value is provided.
+
+                        Integer value to set cutoff of minimum mean number of 
+                        reads for a given genomic region. This value should
+                        vary based on the dataset. Start with a larger value
+                        and decrease to include genes with lower coverage.
+
 OPTIONAL ARGUMENTS: SPECIFIC TO POSITION-BASED ANALYSIS
 
--w, --window-size:      Window size of the positions from the input file.  
+-w, --window-size:      Defaults to [20] if no value is provided.
+                        
+                        Window size to check for positions from input file.  
                         Start with a larger value to minimize compute time.
-                        Defaults to 20 if provided with no value. 
 
-OPTIONAL ARGUMENTS: COMMON
+OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
 
--m, --max-reads:        Parses the provided input BAM file and collects a 
-                        maximum number of reads before the coverage analysis. 
-                        Recommended for datasets that contain rRNA reads, as
-                        this will decrease DG assembly time. Defaults to 1000
-                        if provided with no value.
+-max, --max-reads:      Defaults to [10,000] if no value is provided.
 
--s, --skip-chromosome:  Provide a list of comma separated chromosomes to 
-                        omit when performing the data analysis. Recommended 
-                        for analyses that do not need rRNA reads, as this will 
-                        significantly decrease DG assembly time. 
+                        Parses provided input BAM file and sets a cutoff for 
+                        the number of rRNA reads allowed for coverage analysis. 
 
-                            e.g., chr1,chr2,chr3  
-                        
--S, --statistics:       Provides basic statistics of the job as a log file;
-                        
-                            Initial arguments passed to the script
-                            Job timing & memory used
-                            Read coverage per gene
+                        Recommended for analysis that contain mostly rRNA
+                        reads, as
+                        this will decrease DG assembly time. Note that the 
+                        'annotation' flag [-a] is a paired, required argument. 
 
 -k, --keep-files:       Retains the mean_coverage analysis intermediary files; 
                         
@@ -539,8 +559,21 @@ OPTIONAL ARGUMENTS: COMMON
 
                         WARNING: Error may occur if using the same intermediary 
                         file between analysis types. By default, -k is FALSE.
-                        Provide this argument only when performing the same
+                        Provide this argument only when repeating the same
                         analysis type and changing the min_coverage value.
+
+-s, --skip-chromosome:  Provide a list of comma separated chromosomes to 
+                        omit when performing the data analysis. Highly 
+                        recommended for analyses that do not need rRNA reads,
+                        as this will significantly decrease analysis time. 
+
+                            e.g., chr1,chr2,chr3  
+                        
+-stats, --statistics:   Provides basic statistics of the job as a log file;
+                        
+                            Initial arguments passed to the script
+                            Job timing & memory used
+                            Read coverage per gene
  
 ###########################################################################
 """),
@@ -551,41 +584,41 @@ usage='''
 Usage examples:
     
 - For a gene region-based analysis: 
-    %(prog)s gene input_file min_coverage annotation_file output \
-[-k, -m, -s, -S]\n
+    %(prog)s gene input output annotation_file \
+[-min, -max, -stats, -k]\n
 
 - For a position-based analysis: 
-    %(prog)s position input_file min_coverage annotation_file output \
+    %(prog)s position input output \
 [-w, -k, -m, -s, -S]\n
 ''')
-    # Arguments for the command line.
+
+    # Arguments to be provided in the command line.
     parser.add_argument('analysis_type', 
-        help="'gene' or 'position' options. See help text for more details.")
+        help="Must be 'gene' or 'position'. See help text for more details.")
     
-    parser.add_argument('input_file', 
-        help="Input file in either a BAM or SAM format.")
+    parser.add_argument('input', 
+        help="Input file in unsorted BAM or SAM format.")
         
     parser.add_argument('output', help="File prefix name for analysis outputs.")
 
     # Flags, specific to the gene-based analysis.
-
-    parser.add_argument('min_coverage', 
-        help="Min_coverage is defined as the minimum number of reads for either"
-        " a given region or position before it is considered highly" 
-        " covered.")
-
-    parser.add_argument('annotation_file', 
+    parser.add_argument('-a', '--annotation', 
         help="Annotation file in the modified GTF format. See help text for "
         " more details.")
 
+    parser.add_argument('-min', '--min_coverage', 
+        help="Min_coverage is defined as the minimum number of reads for a "
+        " given region before it is considered well covered. Defaults to [10]")
 
     # Optional flags, specific to the position-based analysis.
     parser.add_argument('-w', '--window-size',
-        help="Optional parameter for position-based analysis. Defaults to 20" 
-        " nt window size.")
+        help="Optional parameter for position-based analysis. Defaults to [20]")
 
     # Optional flags, common to either analysis type. Set default values.
-    parser.add_argument('-m', '--max-reads', 
+    parser.add_argument('-k', '--keep-files', action='store_true', 
+        help="Optional parameter to keep the intermediary files.")
+
+    parser.add_argument('-max', '--max-reads', 
         help="Optional parameter to define the maximum number of reads. If "
         " provided, subsamples highly covered gene regions.")
 
@@ -593,101 +626,108 @@ Usage examples:
         help="Optional parameter to skip specified chromosomes during "
         " processing.")
 
-    parser.add_argument('-S', '--statistics', action='store_true', 
+    parser.add_argument('-stats', '--statistics', action='store_true', 
         help="Optional parameter to give statistics for the run. Times the" 
         " processed for benchmarking in CRSSANT analysis.")
-
-    parser.add_argument('-k', '--keep-files', action='store_true', 
-        help="Optional parameter to keep the intermediary files.")
 
     args = parser.parse_args()
 
     ###########################################################################
-    # Parse arguments and perform sub-functions.
-
-    # Time the job for the --statistics flag. 
+    # Begin timing the job for the --statistics flag. 
     start_time = time.time()
 
-    # Check for gene regions based on the annotation file.
-    gene_regions = collapse_gene_regions(args.annotation_file)    
+    # Check for optional arguments to modify functions.
+    min_coverage = args.min_coverage # Gene-based: Default 10
+    window_size = args.window_size # Position-based: Default 20
+    keep_files = args.keep_files # Default: False
+    max_reads = args.max_reads # Default: None
+    skip_chromosome = args.skip_chromosome # Default: None
+    statistics = args.statistics # Default: None
 
-    # Check positional arguments, existing files, strip file extensions. 
-    analysis_type = args.analysis_type
+    # Check for mandatory positional arguments.
+    analysis_type = args.analysis_type # Must be 'gene' or 'position'
+    input_file = args.input # Must be in unsorted BAM or SAM format
+    output = args.output # Any string, no file extension necessary
+    annotation = args.annotation # Annotation file in modified GTF format
+
+    # Set up the I/O and parse required arguments.
     if analysis_type != "gene" and analysis_type != "position": 
         print(f"Provided analysis type not supported."
             f" Use 'gene' or 'position'.")
         sys.exit()
 
-    input_file = args.input_file
-    min_coverage = args.min_coverage
-
-    if min_coverage <= 10:
-        print(f"Warning, using a low min_coverage value takes significantly 
-            f" longer for analysis.")
-
-    output = args.output
-    if '.bed' in output:
-        output = os.path.splitext(output)[0]
-
-    # Check for optional arguments. 
-    window_size = args.window_size
-    max_reads = args.max_reads
-    skip_chromosome = args.skip_chromosome
-
-
+    # Parse input file for analysis, set up the output.
     file_extension = os.path.splitext(input_file)[1].lower()
     if os.path.splitext(input_file)[1] != ".sam" and \
         os.path.splitext(input_file)[1] != ".bam":
         print(f"File type not supported."
             f" Make sure the file is in the SAM or BAM format.")
         sys.exit()
+    else:
+        sorted_bam = sort_bam(input_file, max_reads)    
 
-    # Parse input file for analysis, set up the output.
-    sorted_bam = sort_bam(input_file, 'annotation.bed', 
-        max_reads, skip_chromosome)    
+    # Clean output prefix, strip file extensions accidentally provided.
+    if '.bed' in output or '.pdf' in output:
+        output = os.path.splitext(output)[0]
 
-    # For coverage per gene region, output to bed.
-    if args.analysis_type == "gene":
+    # Check options for gene-based analysis.
+    if analysis_type == "gene" or max_reads == True:
+        # Check for gene regions based on the annotation file.
+        gene_regions = collapse_gene_regions(annotation)
+
+    if analysis_type == "gene":
+        if min_coverage is not None and float(min_coverage) < 10:
+            print("\nWARNING: Using a low min_coverage value increases analysis time. "
+              "CTRL + C to cancel now if desired...")
+        try:
+            time.sleep(5)
+            print("\nContinuing...")
+        except KeyboardInterrupt:
+            print("\nOperation canceled by user.")
+            sys.exit(1)
         covered_genes = mosdepth_regions(sorted_bam, 
-            'annotation.bed', min_coverage)
+            annotation, min_coverage)
         region_to_bed(covered_genes, gene_regions, output)
 
     # For coverage by nucleotide position, output to histograms.
-    elif analysis_type == "position":
-        covered_positions = mosdepth_positions(sorted_bam, 'annotation.bed',
-            min_coverage, gene_regions, window_size)
-        position_to_bed(covered_positions, output)
+    if analysis_type == "position":
+        positions = mosdepth_positions(sorted_bam, window_size)
+        position_to_pdf(histogram, output)
 
+    # End the job here and provide the statistics.
     end_time = time.time()
-    print(f"\nJob completed at {timenow()}.\n")
+    print(f"\nJob completed on {timenow()}.\n")
 
-    if args.statistics:
+    # Set up the statistics 
+    if statistics == True:
         elapsed_time = "{:.2f}".format(end_time - start_time)
+        if min_coverage and float(min_coverage) < 10:
+            elapsed_time = "{:.2f}".format(float(elapsed_time) - 5.00)
         print(f"     Elapsed time: {elapsed_time}s")
-
-        if analysis_type = "gene":
-            with open(output, 'rt') as f:
-                count = len(f.readlines())
+        if analysis_type == "gene":
+            count = sum("tRNA" not in gene for gene in covered_genes)
             print(f"  Genes collected: {count}")
-        elif analysis_type = "position":
+        elif analysis_type == "position":
+            pass
             # Fill in a function here, show num_reads or something else useful.
 
-    # Remove the intermediate files unless -k argument is provided.
-    if args.keep_files:
+    # Remove intermediate files unless -k argument is provided.
+    if keep_files == True:
         print(f"\nWARNING: Keeping intermediate files between analysis types"
             f" may lead to incorrect coverage values. Remove and start over"
-            f" if this was unintended.")
+            f" if this was unintended.\n")
     else:
         os.remove('tmp.regions.bed.gz')
         os.remove('tmp.regions.bed.gz.csi')
 
     # Remove unnecessary output files from mosdepth.
-    if os.path.exists('tmp.mosdepth.global.dist.txt'):
+    try:
         os.remove('tmp.mosdepth.global.dist.txt')
-    if os.path.exists('tmp.mosdepth.region.dist.txt'):
         os.remove('tmp.mosdepth.region.dist.txt')
-    if os.path.exists('tmp.mosdepth.summary.txt'):
         os.remove('tmp.mosdepth.summary.txt')
+    
+    except FileNotFoundError:
+        pass #Ignore, if the file does not exist.
 
 if __name__ == "__main__":
     main()
