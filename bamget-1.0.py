@@ -107,8 +107,8 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
                     stop = int(parts[2])
                     gene_name = parts[3]
                     strand = parts[4]
-                    gene_regions[gene_name] = 
-                        (chromosome, start, stop, strand)
+                    gene_regions[gene_name] = (chromosome, start, 
+                        stop, strand)
 
         except Exception as e:
             error_message = (f"\nERROR: Failed to parse annotation.bed. Check"
