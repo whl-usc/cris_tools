@@ -93,11 +93,11 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
         ("chr5", 49657080, 49657690), ("chr5", 49661330, 49661570)]
 
     # Check if the output BED file already exists; check column formatting. 
-    if os.path.exists("annotation.bed"):
+    if os.path.exists('annotation.bed'):
         try:
-            print(f"\nReading gene regions from 'annotations.bed'.")
+            print(f"\nAttempting to read regions from: 'annotation.bed'")
             gene_regions = {}
-            with open("annotation.bed", 'r') as f:
+            with open('annotation.bed', 'r') as f:
                 for line in f:
                     parts = line.split("\t")
                     chromosome = parts[0].strip("'\"")
@@ -191,7 +191,7 @@ def sort_bam(input_file, max_reads=None):
 
         else:
             sam_to_bam = input_file
-            sorted_bam = f"{input_prefix}_low_sorted.bam"
+            sorted_bam = f"{input_prefix}_sorted.bam"
 
         if max_reads is not None:
             try:
@@ -227,6 +227,8 @@ def sort_bam(input_file, max_reads=None):
                     f.writelines(hs45S_low)
 
                 sam_to_bam = (f"{input_prefix}_low.bam")
+                sorted_bam = f"{input_prefix}_low_sorted.bam"
+                
                 out_files = ["header.tmp", "hs45S_low.tmp", "chrom.tmp"]
                 with open(sam_to_bam, 'w') as output_file:
                     for filename in out_files:
@@ -690,13 +692,13 @@ Usage examples:
 
     if analysis_type == "gene":
         if min_coverage is not None and float(min_coverage) < 10:
-            print("\nWARNING: Using a low min_coverage value increases" 
+            print("WARNING: Using a low min_coverage value increases" 
                 " analysis time. CTRL + C to cancel now if desired...")
         try:
             time.sleep(5)
-            print("\nContinuing...")
+            print("Continuing...")
         except KeyboardInterrupt:
-            print("\nOperation canceled by user.")
+            print("Operation canceled by user.")
             sys.exit(1)
         covered_genes = mosdepth_regions(sorted_bam, 
             annotation, min_coverage, skip_chromosome)
@@ -709,7 +711,7 @@ Usage examples:
 
     # End the job here and provide the statistics.
     end_time = time.time()
-    print(f"\nJob completed on {timenow()}.\n")
+    print(f"\nBAMget.py completed on {timenow()}.\n")
 
     # Set up the statistics 
     if statistics == True:
@@ -726,7 +728,7 @@ Usage examples:
 
     # Remove intermediate files unless -k argument is provided.
     if keep_files == True:
-        print(f"\nWARNING: Keeping intermediate files between analysis types"
+        print(f"WARNING: Keeping intermediate files between analysis types"
             f" may lead to incorrect coverage values. Remove and start over"
             f" if this was unintended.\n")
     else:
