@@ -738,6 +738,7 @@ Usage examples:
         os.remove('tmp.mosdepth.global.dist.txt')
         os.remove('tmp.mosdepth.region.dist.txt')
         os.remove('tmp.mosdepth.summary.txt')
+        os.remove('annotation.bed')
     
     except FileNotFoundError:
         pass #Ignore, if the file does not exist.
