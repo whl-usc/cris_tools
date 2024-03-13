@@ -16,6 +16,18 @@ Danecek, P.; Bonfield, J. K.; Liddle, J.; Marshall, J.; Ohan, V.; Pollard,
 M. O.; Whitwham, A.; Keane, T.; McCarthy, S. A.; Davies, R. M.; Li, H.
 GigaScience, Volume 10, Issue 2, February 2021
 """
+# Define version
+__version__="1.0"
+
+# Version notes
+__update_notes__="""
+Version 1.0:
+- Gene-region based analysis function and output to BED6 file is complete.
+
+To Do:
+- Add position-based analysis
+- Add support for non homo-sapiens (HS) genome files.
+"""
 
 # Import Packages
 from datetime import datetime
@@ -63,12 +75,9 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
         and strand information as values.        
     """
     valid_chromosomes = set([f"chr{i}" for i in range(1, 23)] + 
-        ["chrX", "chrY", "chrM"])
-
-    # ### FIX THIS SECTION. SKIPPING CHROMOSOMES IS STILL BROKEN.
-    # if skip_chromosome != None:
-    #     skip_chromosome = skip_chromosome.split(',')
-    #     print(f"Skipping reads that are on chromosomes: {skip_chromosome}")
+        ["chrX", "chrY", "chrM"] + [])
+    # Add extra "chromosomes" as needed into the last list. This function
+    # will eventually be updated to be able to handle more unique cases.
 
     # Define blacklisted regions as list of tuples (chromosome, start, stop).
     blacklist_regions = [
@@ -109,7 +118,6 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
                     strand = parts[4]
                     gene_regions[gene_name] = (chromosome, start, 
                         stop, strand)
-
         except Exception as e:
             error_message = (f"\nERROR: Failed to parse annotation.bed. Check"
                 f" to see if the columns are as defined in the help section.")
@@ -354,91 +362,91 @@ def region_to_bed(covered_genes, gene_regions, output):
 ###########################################################################
 # 2. Position based analysis - calculation and plotting to histograms. 
 
-# RE-WRITE THIS FUNCTION SO THAT IT PLOTS A HISTOGRAM WITH THE OUTPUT
-# INSTEAD OF USING THE SAME FILE FOR GENES.BED
+    # RE-WRITE THIS FUNCTION SO THAT IT PLOTS A HISTOGRAM WITH THE OUTPUT
+    # INSTEAD OF USING THE SAME FILE FOR GENES.BED
 
-# def mosdepth_positions(sorted_bam, window_size=None):
-#     """
-#     Function that parses the provided sorted_bam file to determine positions
-#     that meet or exceed minimum coverage as defined by user. Uses mosdepth
-#     functions to determine reads at each nucleotide "window", then collects 
-#     alignments >= min_coverage which overlap the gene_regions. Defining
-#     num_cores may speed up depth calculations, with little improvement past 
-#     4 threads.
+    # def mosdepth_positions(sorted_bam, window_size=None):
+    #     """
+    #     Function that parses the provided sorted_bam file to determine positions
+    #     that meet or exceed minimum coverage as defined by user. Uses mosdepth
+    #     functions to determine reads at each nucleotide "window", then collects 
+    #     alignments >= min_coverage which overlap the gene_regions. Defining
+    #     num_cores may speed up depth calculations, with little improvement past 
+    #     4 threads.
 
-#     Args/Returns:
-#         Same as mosdepth_regions() function.
-#     """
-#     if os.path.exists('tmp.regions.bed.gz'):
-#         print(f"WARNING: Does the tmp.regions.bed")
-#         with gzip.open('tmp.regions.bed.gz', 'rt') as f:
-#             for i, line in enumerate(f):
-#                 chrom, start, end, cov_mean = line.strip().split()
-#                 window_size = int(end) - int(start)
-#                 break
+    #     Args/Returns:
+    #         Same as mosdepth_regions() function.
+    #     """
+    #     if os.path.exists('tmp.regions.bed.gz'):
+    #         print(f"WARNING: Does the tmp.regions.bed")
+    #         with gzip.open('tmp.regions.bed.gz', 'rt') as f:
+    #             for i, line in enumerate(f):
+    #                 chrom, start, end, cov_mean = line.strip().split()
+    #                 window_size = int(end) - int(start)
+    #                 break
 
-#         print(f"Mean coverage summary for positions already exists with"
-#             f" window size of: {window_size}" 
-#             f" If window is not as expected, remove file and try again.")
-#     else:
+    #         print(f"Mean coverage summary for positions already exists with"
+    #             f" window size of: {window_size}" 
+    #             f" If window is not as expected, remove file and try again.")
+    #     else:
 
-#         if os.cpu_count() >= 4:
-#             num_threads = str(4) 
-#         else:
-#             num_threads = str(os.cpu_count())
+    #         if os.cpu_count() >= 4:
+    #             num_threads = str(4) 
+    #         else:
+    #             num_threads = str(os.cpu_count())
 
-#         # Includes a conditional window_size, defaults to 20 nt.
-#         # This might need to be changed to 15 as a default for smaller genes. 
-#         if window_size is None:
-#             window = 20
-#         else:
-#             window = int(window_size)
-  
-#         mosdepth_args = ['mosdepth', '-n', 
-#                         '-b', str(window), 
-#                         '-t', num_threads, 
-#                         'tmp', sorted_bam]
-#         subprocess.run(mosdepth_args, check=True)
+    #         # Includes a conditional window_size, defaults to 20 nt.
+    #         # This might need to be changed to 15 as a default for smaller genes. 
+    #         if window_size is None:
+    #             window = 20
+    #         else:
+    #             window = int(window_size)
+      
+    #         mosdepth_args = ['mosdepth', '-n', 
+    #                         '-b', str(window), 
+    #                         '-t', num_threads, 
+    #                         'tmp', sorted_bam]
+    #         subprocess.run(mosdepth_args, check=True)
 
-#     covered_positions = []    
-#     with gzip.open('tmp.regions.bed.gz', 'rt') as f:
-#         for line in f:
-#             chrom, start, end, cov_mean = line.strip().split()
-#             if cov_mean >= min_coverage:
-#                 gene = f"{start}_{end}"
-#                 covered_positions = [chrom, start, end, gene]
-#                 covered_positions.append(gene)
+    #     covered_positions = []    
+    #     with gzip.open('tmp.regions.bed.gz', 'rt') as f:
+    #         for line in f:
+    #             chrom, start, end, cov_mean = line.strip().split()
+    #             if cov_mean >= min_coverage:
+    #                 gene = f"{start}_{end}"
+    #                 covered_positions = [chrom, start, end, gene]
+    #                 covered_positions.append(gene)
 
-#     return covered_positions
+    #     return covered_positions
 
-# RE-WRITE THIS FUNCTION. MAKE IT GENERATE A HISTOGRAM INSTEAD.
-# def position_to_bed(covered_positions, output):
-#     """
-#     Reads the return from  position based analysis to write output to file. 
+    # RE-WRITE THIS FUNCTION. MAKE IT GENERATE A HISTOGRAM INSTEAD.
+    # def position_to_bed(covered_positions, output):
+    #     """
+    #     Reads the return from  position based analysis to write output to file. 
 
-#     Args:
-#         covered_positions:  Set of genes that have high coverage positions.
-#         output (str):   PATH to the output BED file. 
+    #     Args:
+    #         covered_positions:  Set of genes that have high coverage positions.
+    #         output (str):   PATH to the output BED file. 
 
-#     Returns:
-#         None
-#     """
-#     mode = 'a' if os.path.exists(output) else 'w'
-        
-#     existing_genes = set()
-#     if mode =='a':
-#         with open(output+'.bed', 'r') as f:
-#             for line in f:
-#                 existing_genes.add(line.split('\t')[3]).strip()
+    #     Returns:
+    #         None
+    #     """
+    #     mode = 'a' if os.path.exists(output) else 'w'
+            
+    #     existing_genes = set()
+    #     if mode =='a':
+    #         with open(output+'.bed', 'r') as f:
+    #             for line in f:
+    #                 existing_genes.add(line.split('\t')[3]).strip()
 
-#     with open(output+'.bed', mode, newline='') as f:
-#         for gene in covered_positions:
-#             if gene in existing_genes:
-#                 if "tRNA" not in gene_name: 
-#                     line_pos = f"{chrom}\t{start}\t{stop}\t{gene}\t1000\t+\n"
-#                     line_neg = f"{chrom}\t{start}\t{stop}\t{gene}\t1000\t-\n"
-#                     f.write(line_pos); f.write(line_neg)
-#                     existing_genes.add(gene_name)
+    #     with open(output+'.bed', mode, newline='') as f:
+    #         for gene in covered_positions:
+    #             if gene in existing_genes:
+    #                 if "tRNA" not in gene_name: 
+    #                     line_pos = f"{chrom}\t{start}\t{stop}\t{gene}\t1000\t+\n"
+    #                     line_neg = f"{chrom}\t{start}\t{stop}\t{gene}\t1000\t-\n"
+    #                     f.write(line_pos); f.write(line_neg)
+    #                     existing_genes.add(gene_name)
 
 ###########################################################################
 # 3. Main, define accepted arguments. 
