@@ -2,7 +2,7 @@
 contact:    wlee9829@gmail.com
 date:       2024_02_09
 python:     python3.10
-script:     bamget-1.0.py
+script:     bamget.py
 
 This script is tool for preparing a BED file for CRSSANT analysis based on 
 either the minimum coverage per annotated gene regions or nucleotide. Files
@@ -453,7 +453,7 @@ def region_to_bed(covered_genes, gene_regions, output):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="bamget-1.0.py",
+        prog="bamget.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent("""\
 ###########################################################################
