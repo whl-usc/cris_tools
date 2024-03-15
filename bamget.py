@@ -17,10 +17,10 @@ M. O.; Whitwham, A.; Keane, T.; McCarthy, S. A.; Davies, R. M.; Li, H.
 GigaScience, Volume 10, Issue 2, February 2021
 """
 # Define version
-__version__="1.0"
+__version__ = "1.0"
 
 # Version notes
-__update_notes__="""
+__update_notes__ = """
 Version 1.0:
 - Gene-region based analysis function and output to BED6 file is complete.
 
@@ -653,9 +653,13 @@ Usage examples:
         help="Optional parameter to give statistics for the run. Times the" 
         " processed for benchmarking in CRSSANT analysis.")
 
+    parser.add_argument('-V', '--version', action='version', 
+        version=f'%(prog)s {__version__}')
+
     args = parser.parse_args()
 
     ##########################################################################
+
     # Begin timing the job for the --statistics flag. 
     start_time = time.time()
 
