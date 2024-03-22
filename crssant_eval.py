@@ -184,6 +184,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="benchmark.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawTextHelpFormatter,      
         description=textwrap.dedent("""\
 ###########################################################################
 Pass
@@ -202,17 +203,12 @@ usage='''
     parser.add_argument('-min', '--min_coverage', 
         help="Min_coverage is defined as minimum number of reads for a region"
         " before it is considered well covered. Defaults to [5]")
-    parser.add_argument('-V', '--version', action='store_true', 
+    parser.add_argument('-V', '--version', action='version', 
+        version=f'%(prog)s {__version__}\n{__update_notes__}', 
         help='Print version + update notes and exit.')
-
     ##########################################################################
 
     args = parser.parse_args()
-
-    if args.version:
-        print(f"Version: {__version__}")
-        print(f"{__update_notes__}")
-        sys.exit()
 
     if args.log_out:
         if args.min_coverage:

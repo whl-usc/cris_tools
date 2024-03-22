@@ -455,6 +455,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="bamget.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent("""\
 ###########################################################################
 
@@ -617,52 +618,39 @@ Usage examples:
     # Arguments to be provided in the command line.
     parser.add_argument('analysis_type', 
         help="Must be 'gene' or 'position'. See help text for more details.")
-    
     parser.add_argument('input', 
         help="Input file in unsorted BAM or SAM format.")
-        
     parser.add_argument('output', 
         help="File prefix name for analysis outputs.")
-
     # Flags, specific to the gene-based analysis.
     parser.add_argument('-a', '--annotation', 
         help="Annotation file in the modified GTF format. See help text for"
         " more details.")
-
     parser.add_argument('-min', '--min_coverage', 
         help="Min_coverage is defined as minimum number of reads for a region"
         " before it is considered well covered. Defaults to [10]")
-
     # Optional flags, specific to the position-based analysis.
     parser.add_argument('-w', '--window-size',
         help="Optional parameter for position-based analysis."
         " Defaults to [20]")
-
     # Optional flags, common to either analysis type. Set default values.
     parser.add_argument('-k', '--keep-files', action='store_true', 
         help="Optional parameter to keep the intermediary files.")
-
     parser.add_argument('-max', '--max-reads', 
         help="Optional parameter to define the maximum number of reads. If"
         " provided, subsamples highly covered gene regions.")
-
     parser.add_argument('-skip', '--skip-chromosome', nargs='?', 
         help="Optional parameter to skip chromosomes during processing.")
-
     parser.add_argument('-stats', '--statistics', action='store_true', 
         help="Optional parameter to give statistics for the run. Times the" 
         " processed for benchmarking in CRSSANT analysis.")
-
-    parser.add_argument('-V', '--version', action='store_true', 
+    parser.add_argument('-V', '--version', action='version', 
+        version=f'%(prog)s {__version__}\n{__update_notes__}', 
         help='Print version + update notes and exit.')
 
     args = parser.parse_args()
 
     ##########################################################################
-    if args.version:
-        print(f"Version: {__version__}")
-        print(f"{__update_notes__}")
-        sys.exit()
 
     # Begin timing the job for the --statistics flag. 
     start_time = time.time()
