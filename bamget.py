@@ -21,12 +21,12 @@ __version__ = "1.0.0"
 
 # Version notes
 __update_notes__ = """
-Version 1.0.0:
-- Gene-region based analysis function and output to BED6 file is complete.
+1.0.0
+    -   Gene-region based analysis function and output to BED6 file is complete.
 
 To Do:
-- Add position-based analysis
-- Add support for non homo-sapiens (HS) genome files.
+    -   Add position-based analysis
+    -   Add support for non homo-sapiens (HS) genome files.
 """
 
 # Import Packages
@@ -454,7 +454,6 @@ def region_to_bed(covered_genes, gene_regions, output):
 def main():
     parser = argparse.ArgumentParser(
         prog="bamget.py",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
         formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent("""\
 ###########################################################################

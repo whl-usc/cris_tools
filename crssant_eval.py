@@ -12,18 +12,15 @@ __version__="1.0.1"
 
 # Version notes
 __update_notes__="""
-
 1.0.1
-    - Wrote function to read CRSSANT output files, write to Log.out file.
+    -   Wrote function to read CRSSANT output files, write to Log.out file.
 
 1.0.0
-    - Calculations for run speed based on multiple regression.
+    -   Calculations for run speed based on multiple regression.
 
 To Do:
-
-    - Improve error handling and logging.
-    - Add CSV output for file types
-
+    -   Improve error handling and logging.
+    -   Add CSV output for file types
 """
 
 # Import Packages
@@ -183,8 +180,7 @@ def skip_read(logfile):
 def main():
     parser = argparse.ArgumentParser(
         prog="benchmark.py",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        formatter_class=argparse.RawTextHelpFormatter,      
+        formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent("""\
 ###########################################################################
 Pass
