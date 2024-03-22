@@ -153,7 +153,7 @@ def read_outfile(minreads, outfile):
 
     return log_out
 
-def skip(): 
+def skip_read(logfile): 
     """
     Performs a multiple regression analysis using data from the CRSSANT run
     times that "skipped" the hs45S chromosome that contains rRNA reads. The
@@ -162,11 +162,14 @@ def skip():
 
     # Set up arrays from multiple runs.
     #######################################################
-    runtime=[0, 75, 111, 0, 493, 572]
-    reads=[0, 282472, 444572, 0, 55489, 137467]
-    gene_len=[0, 158, 158, 0, 193, 193]
+    df = pd.read_csv(logfile, sep='\t')
+    skipped_df = df[~df['Sample_Name'].str.contains('all') & df['Sample_Name'].str.contains('low')]
+    
+    runtime = df['Assembly'].tolist()
+    reads = df['Reads'].tolist()
+    genes = df['Genes'].tolist()
 
-    variables = np.array([reads, gene_len]).T
+    variables = np.array([reads, genes]).T
     outcome = np.array(runtime) 
     model = LinearRegression().fit(variables, outcome)
 
@@ -199,7 +202,6 @@ usage='''
     parser.add_argument('-min', '--min_coverage', 
         help="Min_coverage is defined as minimum number of reads for a region"
         " before it is considered well covered. Defaults to [5]")
-
     parser.add_argument('-V', '--version', action='store_true', 
         help='Print version + update notes and exit.')
 
@@ -225,6 +227,8 @@ usage='''
             read_outfile(minreads, outfile)
         except Exception as e:
             print(f"An error occured:", {e})
+
+    skip_read("Log.out")
 
 if __name__ == "__main__":
     main()
