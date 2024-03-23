@@ -2,7 +2,7 @@
 contact:    wlee9829@gmail.com
 date:       2024_03_15
 python:     python3.10
-script:     crssant_eval.py
+script:     crssant_proof.py
 
 This script is multifunctional tool for assessing CRSSANT resource use and
 generates a multiple regression analysis based on the generated data. 
@@ -49,7 +49,7 @@ def timenow():
 
     return time
 
-def read_outfile(minreads, outfile):
+def read_outfile(outfile):
     """
     Extracts data from the CRSSANT read statistics from the log.out files.
 
@@ -150,7 +150,19 @@ def read_outfile(minreads, outfile):
 
     return log_out
 
-def skip_read(logfile): 
+def correlation_matrix(logfile):
+    df = pd.read_csv(logfile, sep='\t')
+
+    columns = ['Reads', 'Genes', 'Reading', 
+    'Clustering', 'Assembly', 'Run_Time']
+
+    df_selected = df[columns]
+    correlation_matrix = df_selected.corr()
+    print(correlation_matrix)
+
+    return df_selected
+
+def regression_analysis(df_selected): 
     """
     Performs a multiple regression analysis using data from the CRSSANT run
     times that "skipped" the hs45S chromosome that contains rRNA reads. The
@@ -159,27 +171,22 @@ def skip_read(logfile):
 
     # Set up arrays from multiple runs.
     #######################################################
-    df = pd.read_csv(logfile, sep='\t')
-    skipped_df = df[~df['Sample_Name'].str.contains('all') & df['Sample_Name'].str.contains('low')]
-    
-    runtime = df['Assembly'].tolist()
-    reads = df['Reads'].tolist()
-    genes = df['Genes'].tolist()
+    X = df[['Reads', 'Genes', 'Reading', 'Clustering', 'Assembly']]
+    y = df['Run_Time']
 
-    variables = np.array([reads, genes]).T
-    outcome = np.array(runtime) 
-    model = LinearRegression().fit(variables, outcome)
+    model = LinearRegression().fit(X, y)
 
-    print('Coefficients:', model.coef_)
     print('Intercept:', model.intercept_)
+    print('Coefficients:', model.coef_)
 
     #return model.coef_, model.intercept_
+
 
 ###########################################################################
 # 2. Main, define accepted arguments. 
 def main():
     parser = argparse.ArgumentParser(
-        prog="benchmark.py",
+        prog="crssant_proof.py",
         formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent("""\
 ###########################################################################
@@ -192,13 +199,13 @@ usage='''
 \npython3 %(prog)s [-L]
 
 ''')
-
     parser.add_argument('-L', '--log-out', action='store_true',
         help='Parses crssant output files, writes resource use and statistics'
             ' to a log file.')
-    parser.add_argument('-min', '--min_coverage', 
-        help="Min_coverage is defined as minimum number of reads for a region"
-        " before it is considered well covered. Defaults to [5]")
+    parser.add_argument('-F', '--files', nargs='?', 
+        help='Specifies output files, comma separated.')
+    parser.add_argument('-B', '--benchmark', action='store_true',
+        help='Parses Log.out file, performs regression analysis.')
     parser.add_argument('-V', '--version', action='version', 
         version=f'%(prog)s {__version__}\n{__update_notes__}', 
         help='Print version + update notes and exit.')
@@ -206,21 +213,36 @@ usage='''
 
     args = parser.parse_args()
 
+    file_list = args.files
+
     if args.log_out:
-        if args.min_coverage:
-            minreads = args.min_coverage
+        outfiles = []
+        if file_list:
+            file_names = file_list.split(',')
+            for file in file_names:
+                try:
+                    if os.path.exists(file):
+                        outfiles.append(file)
+                except Exception as e:
+                    print(f"File not found: {file}")
         else:
-            minreads = "5"
+            try:
+                if os.path.exists("crssant_skip.out"):
+                    outfiles.append("crssant_skip.out")
+                if os.path.exists("crssant_low.out"):
+                    outfiles.append("crssant_low.out")
+                if os.path.exists("crssant_all.out"):
+                    outfiles.append("crssant_all.out")
+            except Exception as e:
+                print(f"File not found: {e}")
 
-    outfiles = ["crssant_skip.out", "crssant_low.out", "crssant_all.out"]
-    for outfile in outfiles:
-        try:
+        for outfile in outfiles:
             print(f'{outfile}')
-            read_outfile(minreads, outfile)
-        except Exception as e:
-            print(f"An error occured:", {e})
+            read_outfile(outfile)
 
-    skip_read("Log.out")
+    if args.benchmark:
+        correlation_matrix("Log.out")
+        regression_analysis(df_selected)
 
 if __name__ == "__main__":
     main()
