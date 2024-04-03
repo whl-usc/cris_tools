@@ -26,6 +26,9 @@ To Do:
 # Import Packages
 from datetime import datetime
 import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 import os
 import pandas as pd
 import subprocess
@@ -33,7 +36,6 @@ import sys
 import textwrap
 import time
 from sklearn.linear_model import LinearRegression
-import numpy as np
 
 ###########################################################################
 # 1. Define common functions for the data analysis.
@@ -162,6 +164,9 @@ def correlation_matrix(logfile):
 
     return df_selected
 
+def exponential_model(x, a, b):
+    return a * np.exp(b * x)
+
 def regression_analysis(df_selected): 
     """
     Performs a multiple regression analysis using data from the CRSSANT run
@@ -169,18 +174,38 @@ def regression_analysis(df_selected):
     data analyzed here is the mean between multiple datasets.
     """
 
-    # Set up arrays from multiple runs.
+    # For a linear regression.
     #######################################################
-    X = df[['Reads', 'Genes', 'Reading', 'Clustering', 'Assembly']]
-    y = df['Run_Time']
+    X = df_selected[['Reads', 'Genes']]
+    y = df_selected['Run_Time']
 
     model = LinearRegression().fit(X, y)
-
     print('Intercept:', model.intercept_)
     print('Coefficients:', model.coef_)
 
     #return model.coef_, model.intercept_
 
+    # For an exponential regression.
+    #######################################################
+    x = df_selected['Reads'].values
+    y = df_selected['Run_Time'].values
+    params, covariance = curve_fit(exponential_model, x, y)
+    a, b, = params
+    y_pred = exponential_model(x, a, b)
+
+    # Plot the data and the fitted curve
+    plt.scatter(x, y, label='Data')
+    plt.plot(x, y_pred, color='red', label='Fitted Curve')
+    plt.xlabel('Reads')
+    plt.ylabel('Run_Time')
+    plt.title('Non-linear Regression: Exponential Model')
+    plt.legend()
+    plt.show()
+
+    # Print the parameters of the fitted model
+    print('Parameters of the fitted exponential model:')
+    print('a:', a)
+    print('b:', b)
 
 ###########################################################################
 # 2. Main, define accepted arguments. 
@@ -241,7 +266,7 @@ usage='''
             read_outfile(outfile)
 
     if args.benchmark:
-        correlation_matrix("Log.out")
+        df_selected = correlation_matrix("Log.out")
         regression_analysis(df_selected)
 
 if __name__ == "__main__":

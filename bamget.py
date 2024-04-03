@@ -15,6 +15,9 @@ genomes and exomes, Bioinformatics, Volume 34, Issue 5, March 2018, 867–868
 Danecek, P.; Bonfield, J. K.; Liddle, J.; Marshall, J.; Ohan, V.; Pollard, 
 M. O.; Whitwham, A.; Keane, T.; McCarthy, S. A.; Davies, R. M.; Li, H.
 GigaScience, Volume 10, Issue 2, February 2021
+
+Amemiya, H.M., Kundaje, A. & Boyle, A.P. The ENCODE Blacklist: Identification
+of Problematic Regions of the Genome. Sci Rep 9, 9354 (2019).
 """
 # Define version
 __version__ = "1.0.0"
@@ -79,7 +82,9 @@ def collapse_gene_regions(annotation_file, skip_chromosome=None):
     # Add extra "chromosomes" as needed into the last list. This function
     # will eventually be updated to be able to handle more unique cases.
 
-    # Define blacklisted regions as list of tuples (chromosome, start, stop).
+    # Blacklist is from ENCODE, regions that have anomalous, unstructured, or 
+    # unordinarily high signal in multiple NGS experiments.
+    # Defined blacklisted regions as a list tuples (chromosome, start, stop):
     blacklist_regions = [
         ("chr10", 38528030, 38529790), ("chr10", 42070420, 42070660),
         ("chr16", 34571420, 34571640), ("chr16", 34572700, 34572930),
@@ -362,8 +367,8 @@ def region_to_bed(covered_genes, gene_regions, output):
 ###########################################################################
 # 2. Position based analysis - calculation and plotting to histograms. 
 
-    # RE-WRITE THIS FUNCTION SO THAT IT PLOTS A HISTOGRAM WITH THE OUTPUT
-    # INSTEAD OF USING THE SAME FILE FOR GENES.BED
+    # THIS FUNCTION WILL PLOT A HISTOGRAM WITH THE OUTPUT OF MOSDEPTH
+    # INSTEAD OF PRODUCING A FILE FOR GENES.BED
 
     # def mosdepth_positions(sorted_bam, window_size=None):
     #     """
@@ -416,29 +421,24 @@ def region_to_bed(covered_genes, gene_regions, output):
     #                 gene = f"{start}_{end}"
     #                 covered_positions = [chrom, start, end, gene]
     #                 covered_positions.append(gene)
-
     #     return covered_positions
 
     # RE-WRITE THIS FUNCTION. MAKE IT GENERATE A HISTOGRAM INSTEAD.
     # def position_to_bed(covered_positions, output):
     #     """
     #     Reads the return from  position based analysis to write output to file. 
-
     #     Args:
     #         covered_positions:  Set of genes that have high coverage positions.
     #         output (str):   PATH to the output BED file. 
-
     #     Returns:
     #         None
     #     """
-    #     mode = 'a' if os.path.exists(output) else 'w'
-            
+    #     mode = 'a' if os.path.exists(output) else 'w'           
     #     existing_genes = set()
     #     if mode =='a':
     #         with open(output+'.bed', 'r') as f:
     #             for line in f:
     #                 existing_genes.add(line.split('\t')[3]).strip()
-
     #     with open(output+'.bed', mode, newline='') as f:
     #         for gene in covered_positions:
     #             if gene in existing_genes:
