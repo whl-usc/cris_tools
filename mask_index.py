@@ -11,6 +11,10 @@ __version__="1.1.0"
 
 # Verison notes
 __update_notes__="""
+2.0.0 
+    -   Changed genome FASTA to be index based, add support for multithread 
+        processing. 
+
 1.1.0
     -   Added argument to define sequence orientations "identical | reverse |
         reverse_complement".
@@ -19,7 +23,6 @@ __update_notes__="""
 
 To do:
     -   Write output list of index locations for quicker reading.
-
 """
 
 # Import Packages
