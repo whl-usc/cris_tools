@@ -23,10 +23,14 @@ Amemiya, H.M., Kundaje, A. & Boyle, A.P. The ENCODE Blacklist: Identification
 of Problematic Regions of the Genome. Sci Rep 9, 9354 (2019).
 """
 # Define version
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # Version notes
 __update_notes__ = """
+2.1.0
+    -   Added support for multi-threaded processing. 
+    -   Updated docstrings and formatting.
+
 2.0.0
     -   Added support for position-based analysis function, output modified
         BAM file based on cutoff and window size.
@@ -52,7 +56,7 @@ import glob
 import gzip
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from multiprocessing import Pool
+import multiprocessing
 import os
 import pandas as pd
 import random
@@ -742,6 +746,8 @@ def plot_histogram(chrom, data):
     plt.figure(figsize=(10, 6)); ax = plt.gca()
     plt.bar(start_positions, cov_means, width=bar_widths, 
         edgecolor='black')
+    plt.xlim(left=0)
+
     # Despine plot.
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -757,7 +763,7 @@ def plot_histogram(chrom, data):
     plt.savefig(f'coverage_histogram_{chrom}.svg')
     plt.close()
 
-def plot_cov_hist(valid_positions, window_size):
+def plot_coverage(valid_positions, window_size):
     """
     Reads the return from position based analysis to write output to file. 
     Args:
@@ -807,25 +813,17 @@ def plot_cov_hist(valid_positions, window_size):
         print(f"Error: {e}")
         thread_count = 1
 
-    print(f"Using {thread_count} threads for plotting.")
-
-    pool = Pool(thread_count)
-    results = []
+    print(f"\nUsing {thread_count} threads for plotting.")
+    pool = multiprocessing.Pool(processes=thread_count)
 
     for chrom, data in coverage_data.items():
-        chunk_size = len(data['start_positions']) // thread_count
-        chunks = [(chrom, {
-            'start_positions': data['start_positions'][i:i+chunk_size],
-            'end_positions': data['end_positions'][i:i+chunk_size],
-            'cov_means': data['cov_means'][i:i+chunk_size]
-        }) for i in range(0, len(data['start_positions']), chunk_size)]
-        results.extend(pool.starmap_async(plot_histogram, chunks))
+        pool.apply_async(plot_histogram, (chrom, data))
 
     pool.close()
-    pool.join()
 
-    for result in results:
-        result.wait()
+
+
+    pool.join()
 
 ###########################################################################
 # 3. Main, define accepted arguments. 
@@ -1087,8 +1085,8 @@ def main():
     # Coverage by nucleotide position, output to histograms.
     if analysis_type == "position":
         positions = mosdepth_positions(sorted_bam, 
-            window_size, min_coverage, skip_chromosome)
-        plot_cov_hist(positions, window_size)
+            window_size, skip_chromosome)
+        plot_coverage(positions, window_size)
         output_directory = "coverage_histograms"
         os.makedirs(output_directory, exist_ok=True)
         for filename in os.listdir('.'):
