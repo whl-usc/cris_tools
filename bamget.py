@@ -23,10 +23,15 @@ Amemiya, H.M., Kundaje, A. & Boyle, A.P. The ENCODE Blacklist: Identification
 of Problematic Regions of the Genome. Sci Rep 9, 9354 (2019).
 """
 # Define version
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 
 # Version notes
 __update_notes__ = """
+2.1.1
+    -   Added new optional flag to specify which chromosome to plot in the 
+        'position' based analysis.
+    -   Updated docstrings to reflect new options.
+
 2.1.0
     -   Added support for multi-threaded processing. 
     -   Updated docstrings and formatting.
@@ -689,9 +694,12 @@ def region_to_bed(covered_genes, gene_regions, output):
 ###########################################################################
 # 2. Position based analysis - calculation and plotting to histograms. 
 
-def mosdepth_positions(sorted_bam, window_size=None, skip_chromosome=None):
+def mosdepth_positions(sorted_bam, window_size=None, 
+    skip_chromosome=None, chromosome=None):
     """
-    Function that parses the provided sorted_bam file to determine mean coverage at the various nucleotide positions. Uses mosdepth to determine reads at each nucleotide "window", 
+    Function that parses the provided sorted_bam file to determine mean
+    coverage at the various nucleotide positions. Uses mosdepth to determine 
+    reads at each nucleotide "window", 
 
     Args:
         sorted_bam:     PATH to BAM file
@@ -700,20 +708,23 @@ def mosdepth_positions(sorted_bam, window_size=None, skip_chromosome=None):
     (Optional)
         skip_chromosome:    comma separated list of chromosomes to skip 
                             from the input file.
-     """
+        chromosome:         comma separated list of chromosomes to keep
+                            from the input file.
+    """
     valid_positions = []
     if os.path.exists('tmp.regions.bed.gz'):
         print(f"\nMean coverage summary for positions exists. Using for" 
             " analysis...")
         with gzip.open('tmp.regions.bed.gz', 'rt') as f:
+            chromosomes = set()
             for line in f:
                 chrom, start, end, cov_mean = line.strip().split()
                 valid_positions.append((chrom, int(start), 
                     int(end), float(cov_mean)))
-
+                chromosomes.add(chrom)
     else:
         num_threads = min(os.cpu_count(), 4)
-        window = 20 if window_size is None else int(window_size)
+        window = 1000 if window_size is None else int(window_size)
   
         mosdepth_args = ['mosdepth', '-n', 
                         '-b', str(window), 
@@ -722,15 +733,29 @@ def mosdepth_positions(sorted_bam, window_size=None, skip_chromosome=None):
         subprocess.run(mosdepth_args, check=True, stderr=subprocess.DEVNULL)
 
         with gzip.open('tmp.regions.bed.gz', 'rt') as f:
+            chromosomes = set()
             for line in f:
                 chrom, start, end, cov_mean = line.strip().split()
                 valid_positions.append((chrom, int(start), 
                     int(end), float(cov_mean)))
-    
-    if skip_chromosome:
+                chromosomes.add(chrom)
+
+    if chromosome: 
+        kept = chromosome.split(',')
+        valid_positions = ([pos for pos in valid_positions 
+        if pos[0] in kept])
+
+    if skip_chromosome: 
         skipped = skip_chromosome.split(',')
         valid_positions = ([pos for pos in valid_positions 
-            if pos[0] not in skipped])
+        if pos[0] not in skipped])
+
+    if chromosome and skip_chromosome:
+        common_elements = set(kept) & set(skipped)
+        if common_elements:
+            print("Warning: There are chromosomes listed in both the '-skip' "
+                " and '-chrom' options. Remove from one option before "
+                " continuing:", common_elements)
 
     return valid_positions
 
@@ -744,8 +769,8 @@ def plot_histogram(chrom, data):
     # Change size and style.
     plt.ioff()
     plt.figure(figsize=(10, 6)); ax = plt.gca()
-    plt.bar(start_positions, cov_means, width=bar_widths, 
-        edgecolor='black')
+    plt.bar(start_positions, cov_means, width=bar_widths, linewidth=0.3, 
+        color='lightskyblue', edgecolor='black')
     plt.xlim(left=0)
 
     # Despine plot.
@@ -771,7 +796,7 @@ def plot_coverage(valid_positions, window_size):
                                 end, and coverage values.
         output_dir (str):       Path to an output directory. 
     Returns:
-        File: PNG for histogram plot.
+        File:   SVG histogram plot for specific chromosomes.
     """    
     # chromosome_lengths for reference
     # ("chr1", 248956422), ("chr2", 242193529),
@@ -813,16 +838,16 @@ def plot_coverage(valid_positions, window_size):
         print(f"Error: {e}")
         thread_count = 1
 
-    print(f"\nUsing {thread_count} threads for plotting.")
+    print(f"\nUsing {thread_count} threads for plotting...")
     pool = multiprocessing.Pool(processes=thread_count)
 
     for chrom, data in coverage_data.items():
-        pool.apply_async(plot_histogram, (chrom, data))
+        if data['cov_means'] and any(mean > 0 for mean in data['cov_means']):
+            pool.apply_async(plot_histogram, (chrom, data))
+        else:
+            print(f"No coverage data found for {chrom}.")
 
     pool.close()
-
-
-
     pool.join()
 
 ###########################################################################
@@ -935,10 +960,16 @@ OPTIONAL ARGUMENTS: SPECIFIC TO GENE-BASED ANALYSIS
 
 OPTIONAL ARGUMENTS: SPECIFIC TO POSITION-BASED ANALYSIS
 
--w, --window-size:      Defaults to [20] if no value is provided.
+-w, --window-size:      Defaults to [1,000] if no value is provided.
                         
                         Window size to check for positions from input file.  
                         Start with a larger value to minimize compute time.
+
+-chrom, --chromosome:   Provides a list of comma separated chromosomes to 
+                        keep when performing the histogram plotting.
+                        Recommended for reducing processing time.
+
+                            -chrom=chr1,chr2,chrM
 
 OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
 
@@ -971,25 +1002,25 @@ OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
                         
 -stats, --statistics:   Provides basic statistics of the job as a log file;
                         
-                            Initial arguments passed to the script
-                            Job timing & memory used
-                            Read coverage per gene
+                            Initial arguments passed
+                            Job timing
  
 ###########################################################################
 """),
-    usage='''
+    usage=
+"""
     \npython3 %(prog)s analysis_type input output [options]
 
     Usage examples:
         
     - For gene region-based analysis: 
         %(prog)s gene input output -a=annotation_file \
-    [-min, -max, -skip, -stats, -k]\n
+[-min, -max, -skip, -stats, -k]\n
 
     - For position-based analysis: 
         %(prog)s position input output \
-    [-w, -max, -skip, -stats, -k]
-    ''')
+[-w, -max, -skip, -stats, -k]
+""")
 
     # Main arguments to be provided in the command line.
     parser.add_argument('analysis_type', 
@@ -998,6 +1029,7 @@ OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
         help="Input file in unsorted BAM or SAM format.")
     parser.add_argument('output', 
         help="File prefix name for analysis outputs.")
+
     # Flags, specific to the gene-based analysis.
     parser.add_argument('-a', '--annotation', 
         help="Annotation file in the modified GTF format. See help text for"
@@ -1005,10 +1037,15 @@ OPTIONAL ARGUMENTS: COMMON TO EITHER ANALYSIS
     parser.add_argument('-min', '--min_coverage', 
         help="Min_coverage is defined as minimum number of reads for a region"
         " before it is considered well covered. Defaults to [10]")
+
     # Optional flags, specific to the position-based analysis.
     parser.add_argument('-w', '--window-size',
         help="Optional parameter for position-based analysis."
-        " Defaults to [20]")
+        " Defaults to [1,000]")
+    parser.add_argument('-chrom', '--chromosome', 
+        help="Optional parameter to specify which chromosome to plot. "
+        " Defaults to [None]")
+
     # Optional flags, common to either analysis type. Set default values.
     parser.add_argument('-k', '--keep-files', action='store_true', 
         help="Optional parameter to keep the intermediary files.")
@@ -1038,6 +1075,7 @@ def main():
     max_reads = args.max_reads # Default: None
     skip_chromosome = args.skip_chromosome # Default: None
     statistics = args.statistics # Default: None
+    chromosome = args.chromosome # Default: None
 
     # Check for mandatory positional arguments.
     analysis_type = args.analysis_type # Must be 'gene' or 'position'
@@ -1064,6 +1102,7 @@ def main():
     if '.bed' in output:
         output = os.path.splitext(output)[0]
 
+    # Gene-based analysis, output overlaps to BED6.
     if max_reads == True:
         if min_coverage is not None and float(min_coverage) < 10:
             print("WARNING: Using a low min_coverage value increases" 
@@ -1075,7 +1114,6 @@ def main():
                 print("Operation canceled by user.")
                 sys.exit(1)
 
-    # Gene-based analysis, output overlaps to BED6.
     if analysis_type == "gene":
         gene_regions = collapse_gene_regions(annotation)
         covered_genes = mosdepth_regions(sorted_bam, 
@@ -1085,12 +1123,12 @@ def main():
     # Coverage by nucleotide position, output to histograms.
     if analysis_type == "position":
         positions = mosdepth_positions(sorted_bam, 
-            window_size, skip_chromosome)
+            window_size, skip_chromosome, chromosome)
         plot_coverage(positions, window_size)
         output_directory = "coverage_histograms"
         os.makedirs(output_directory, exist_ok=True)
         for filename in os.listdir('.'):
-            if filename.endswith('.png'):
+            if filename.endswith('.svg'):
                 shutil.move(filename, 
                     os.path.join(output_directory, filename))
 
@@ -1109,9 +1147,6 @@ def main():
         if analysis_type == "gene":
             count = sum("tRNA" not in gene for gene in covered_genes)
             print(f"  Genes collected: {count}")
-        elif analysis_type == "position":
-            pass
-            # Fill in a function here, show histograms or something useful.
 
     # Remove intermediate files unless -k argument is provided.
     if keep_files == True:
@@ -1119,16 +1154,16 @@ def main():
             f" may lead to incorrect coverage values. Remove and start over"
             f" if this was unintended.\n")
     else:
+        os.remove('annotation.bed')
         os.remove('tmp.regions.bed.gz')
         os.remove('tmp.regions.bed.gz.csi')
 
-    # Remove unnecessary output files from mosdepth.
+    # Remove other output files from mosdepth.
     try:
         os.remove('tmp.mosdepth.global.dist.txt')
         os.remove('tmp.mosdepth.region.dist.txt')
         os.remove('tmp.mosdepth.summary.txt')
-        os.remove('annotation.bed')
-
+        
     #Ignore removal if the file does not exist.
     except FileNotFoundError:
         pass 
