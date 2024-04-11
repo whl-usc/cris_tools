@@ -12,10 +12,13 @@ __version__="1.2.0"
 
 # Version notes
 __update_notes__="""
+1.3.0
+    -   Changed to BAM input processing with .fetch() to speed up read
+        coverage updating. 
+
 1.2.0
     -   Separated options for subtraction or fraction-based coverage updating.
         (See optional flag [-s]).
-    
     -   Updated some docstrings to clarify functions.
 
 1.1.0
@@ -63,8 +66,7 @@ def collapse_gene_regions(annotation_file):
         gene_regions (dict): gene names as keys, chromosome, start, stop
         information as values.
     """
-
-    # Define the valid chromosome names: chr(1-23, X, Y, M)
+    # Define valid chromosome names: chr(1-23, X, Y, M)
     valid_chromosomes = set([f"chr{i}" for i in range(1, 23)] + 
         ["chrX", "chrY", "chrM"] + [])
     gene_regions = {}
@@ -105,7 +107,7 @@ def parse_isharc(input_file, gene_regions):
         gene_regions: {gene: [chromosome, start, stop]}
 
     Returns:
-        gene_coverage: {gene:[(chromosome, position, coverage)]}
+        gene_coverage: {gene:{position: coverage}}
     """
     try:
         bamfile = input_file if input_file.endswith(".bam") \
@@ -125,42 +127,33 @@ def parse_isharc(input_file, gene_regions):
         sys.exit()       
 
     bam = pysam.AlignmentFile(bamfile, "rb")
-    total_reads = sum(1 for _ in bam.fetch())
+    total_genes = len(gene_regions); interval = total_genes // 10
+    processed_genes = 0
 
     # Process reads and generate coverage
     gene_coverage = {}
-    for read in bam.fetch():
-        start = read.reference_start
-        end = read.reference_end
-        chrom = bam.get_reference_name(read.reference_id)
+    for gene, (gene_chrom, gene_start, gene_end) in gene_regions.items():
+        try: gene_reads = bam.fetch(gene_chrom, gene_start, gene_end)
+        except: pass
+        # Process overlapping reads
+        for read in gene_reads:
+            start = read.reference_start
+            end = read.reference_end
+            # Ensure read overlaps with gene region
+            if start <= gene_end and end >= gene_start:
+                for pos in range(max(start, gene_start), 
+                    min(end, gene_end) + 1):
+                    gene_coverage.setdefault(gene, {})
+                    gene_coverage[gene][pos] = \
+                        gene_coverage[gene].get(pos, 0) + 1
 
-        # #This needs to be fixed - broken formatting.
-        # for gene, (gene_chrom, gene_start, gene_end) in gene_regions.items():
-        #     if chrom == gene_chrom and end >= gene_start \
-        #         and start <= gene_end:
-        #         for pos in range(
-        #             max(start, gene_start), min(end, gene_end) + 1):
-        #             key = gene
-        #             gene_coverage.setdefault(key, [])
-        #             position_exists = False
-        #             for i, (position, coverage) in enumerate(
-        #                 gene_coverage[key]):
-        #                 if chrom == position[0] and pos == position[1]:
-        #                     gene_coverage[key][i] = ((chrom, pos), cov + 1)
-        #                     position_exists = True
-        #                     break
-        #             if not position_exists:
-        #                 gene_coverage[key].append((chrom, pos, 1))
-        
-    # Print progress update at every 10% interval
-    processed_reads = len(gene_coverage)
-    if total_reads > 0 and processed_reads % (total_reads // 10) == 0:
-        percent_progress = (processed_reads / total_reads) * 100
-        print(f"{percent_progress:.2f}% processed.")
+        processed_genes += 1
+        if processed_genes % interval == 0:
+            progress_percent = (processed_genes / total_genes) * 100
+            print('.'*20 + f"{progress_percent:.2f}% processed" + '.'*20)
 
     bam.close()
-
-    # print(gene_coverage)
+    # print(gene_coverage) # Check this dictionary.
     return gene_coverage
 
 def parse_bedpe(bedpe_file):
@@ -190,73 +183,56 @@ def parse_bedpe(bedpe_file):
             coverage = int(fields[7]) # Number of DGs at these arm locations
             value = (l_chr, l_start, l_end, r_chr, r_start, r_end, coverage)
             bedpe_dict[key] = value
-    # print(bedpe_dict)
+    
+    # print(bedpe_dict) # In case of discrepancy, check this dictionary.
     return bedpe_dict
 
-def coverage_isolation(gene_coverage_dict, bedpe_dict, 
+def coverage_isolation(gene_coverage, bedpe_dict, 
     subtraction_method=None):
     """
     Score the DG positions. If a single arm (either left or right) overlaps 
-    that position, subtract from the "coverage" score. In instances 
-    where the one of the arms overlap, but other arms do not, subtract the 
-    score by the "coverage" of each arm. Provide the scoring for the 
-    positions.
+    that position, subtract from iSHARC "coverage" by DG coverage. 
+    In instances where only one of the arms overlap, but other arms do not, 
+    subtract the score by the "coverage" of each arm. 
+    Provide the scoring for each of the positions.
 
     Args: 
         bedpe_dict: {DG:[l_chr, l_start, l_end, 
                     r_chr, r_start, r_end, coverage]}
-        gene_coverage: {gene:[chromosome, position, coverage]}
+        gene_coverage: {gene:{position: coverage}}
 
     Returns:
-        isolated_cov: {gene:[position, score]}
+        (updated) gene_coverage: {gene:{position: coverage}}
     """
-    if subtraction_method:
-        # Subtraction based approach
-        for DG, positions in bedpe_dict.items():
-            l_chr, l_start, l_end, r_chr, r_start, r_end, coverage = positions
+    if not subtraction_method:    
+        # Do a fraction based updating approach. 
 
-            for gene in gene_coverage_dict:
-                for pos in range(l_start, l_end + 1):
-                    if pos in gene_coverage_dict[gene]:
-                        gene_coverage_dict[gene][chrom][pos] -= coverage
-                for pos in range(r_start, r_end + 1):
-                    if pos in gene_coverage_dict[gene]:
-                        gene_coverage_dict[gene][chrom][pos] -= coverage
-
-    # Coverage fraction based approach
-    isolated_cov = {}
+    # Subtraction based approach
     for DG, positions in bedpe_dict.items():
         l_chr, l_start, l_end, r_chr, r_start, r_end, coverage = positions
-        overlap_positions = set(range(max(l_start, r_start), 
-            min(l_end, r_end) + 1))
-
-        total_overlap_coverage = sum(gene_coverage_dict.get('U8', 
-            {}).get(pos, 0) for pos in overlap_positions)
-
-        for pos in overlap_positions:
-            overlap_fraction = gene_coverage_dict.get('U8', 
-                {}).get(pos, 0) / total_overlap_coverage if \
-                    total_overlap_coverage > 0 else 0
-            subtracted_coverage = coverage * overlap_fraction
-            isolated_cov.setdefault('U8', {})[pos] = subtracted_coverage
+        for gene in gene_coverage:
+            for pos in range(l_start, l_end + 1):
+                if pos in gene_coverage[gene]:
+                    gene_coverage[gene][pos] -= coverage
+            for pos in range(r_start, r_end + 1):
+                if pos in gene_coverage[gene]:
+                    gene_coverage[gene][pos] -= coverage
     
-    print(isolated_cov)
-    return isolated_cov
+    print(gene_coverage)
+    return gene_coverage
 
-def cov_to_bed(isolated_cov):
+def cov_to_bed(gene_coverage):
     """
     Args: 
-        isolated_cov: {gene:[position, coverage]}
+        gene_coverage: {gene:{position, coverage}}
 
     Returns:
         bedgraph: [gene, start, stop, coverage]
     """
-    bedgraph = []
-    for gene, positions in isolated_cov.items():
-        for position, coverage in positions.items():
-            start = position - 1
-            stop = position
-            bedgraph.append([gene, start, stop, coverage])
+    bedgraph = [[gene, pos - 1, pos, coverage]
+        for gene, positions in gene_coverage.items()
+        for pos, coverage in positions.items()]
+
     with open('updated_coverage.bedgraph', 'w') as f:
         for row in bedgraph:
             f.write('\t'.join(map(str, row)) + '\n')
@@ -346,10 +322,12 @@ NOTE: Arguments must be provided in the following order:
 
 OPTIONAL ARGUMENTS:
 
--s, --subtraction:  Defines the coverage updating method. Uses subtraction
-                    based method instead of the fraction updating. This is
-                    only recommended for iSHARC data with high coverage and
-                    bedpe that are sparsely populated.
+-s, --subtraction:  Defines the coverage scoring method. Use subtraction
+                    based method instead of the fraction updating. For reads 
+                    with overlapping positions, iSHARC read coverage is 
+                    subtracted by the DG coverage. This is only recommended 
+                    for iSHARC reads at high coverage and for sparsely 
+                    populated DG data.
 
 ###########################################################################
             """),
@@ -368,29 +346,29 @@ OPTIONAL ARGUMENTS:
     return parser.parse_args()
 
 def main():
-    print(timenow(), " Starting analysis of DG file.")
+    print(timenow(), "Starting analysis of DG file.")
 
     # Check for input files.
     annotation = args.annotation
     isharc_bam = args.isharc_file
     bedpe = args.bedpe_file
-
     # Check for optional argument
-    subtraction_method = args.subtraction
-
-    print(timenow() + f" Collecting gene regions from {annotation}...")
+    method = args.subtraction
+    # Start collecting gene regions based on annotation file.
+    print(timenow(), f"Collecting gene regions from {annotation}...")
     gene_regions = collapse_gene_regions(annotation)
-    
-    print(timenow() + f" Filtering coverage based on gene regions...")
+    # Start sorting reads based on gene regions.
+    print(timenow(), f"Filtering coverage based on gene regions...\n")
     gene_coverage_dict = parse_isharc(isharc_bam, gene_regions)
-    
-    print(timenow() + f" Updating coverage scores based on DG overlaps...")
+    # Re-score coverage using either subtraction or fraction methods.
+    print("\n" + timenow(), 
+        f"Updating coverage scores based on DG overlaps...\n")
     bedpe_dict = parse_bedpe(bedpe)
     new_coverage = coverage_isolation(gene_coverage_dict, bedpe_dict,
-        subtraction_method)
+        method)
     cov_to_bed(new_coverage)
 
-    print(timenow() + f" Job completed.")
+    print("\n" + timenow(), f"Job completed...\n")
 
 if __name__ == "__main__":
     args = parse_args()
