@@ -13,14 +13,12 @@ __version__="1.3.0"
 # Version notes
 __update_notes__="""
 1.3.0
-    -   Changed to BAM input processing with .fetch() to speed up read
-        coverage updating. 
-
-1.2.0
     -   Separated options for subtraction of "all" DG or the lowest
         confidence DG for coverage updating. (See optional flag [-s]).
     -   Updated some docstrings to clarify functions.
-
+1.2.0
+    -   Changed to BAM input processing with .fetch() to speed up read
+        coverage updating. 
 1.1.0
     -   Function to determine overlap regions in bedpe, remove coverage from 
         the iSHARC bam based on DG arms.
@@ -88,13 +86,6 @@ def collapse_gene_regions(annotation_file):
                     min(start, gene_regions[gene_name][1]), 
                     max(stop, gene_regions[gene_name][2]))
 
-        # # Write the gene regions to BED file.
-        # with open("annotation.bed", 'w') as file:
-        #     for gene_name, gene_info in gene_regions.items():
-        #             chromosome, start, stop = gene_info
-        #             file.write(
-        #                 f"{chromosome}\t{start}\t{stop}\t{gene_name}\n")
-
     return gene_regions
 
 def parse_isharc(input_file, gene_regions):
@@ -153,7 +144,8 @@ def parse_isharc(input_file, gene_regions):
             print('.'*20 + f"{progress_percent:.2f}% processed" + '.'*20)
 
     bam.close()
-    print(gene_coverage) # Check this dictionary.
+
+    print(gene_coverage) # In case of discrepancy, check this dictionary.
     return gene_coverage
 
 def parse_bedpe(bedpe_file):
@@ -187,31 +179,34 @@ def parse_bedpe(bedpe_file):
                 coverage, confidence)
             bedpe_dict[key] = value
     
-    print(bedpe_dict) # In case of discrepancy, check this dictionary.
+    # print(bedpe_dict) # In case of discrepancy, check this dictionary.
     return bedpe_dict
 
 def coverage_isolation(gene_coverage, bedpe_dict, 
-    subtract_all=None):
+    method):
     """
-    Score the DG positions. If a single arm (either left or right) overlaps 
-    that position, subtract from iSHARC "coverage" by DG coverage. 
-    In instances where only one of the arms overlap, but other arms do not, 
-    subtract the score by the "coverage" of each arm. 
-    Provide the scoring for each of the positions.
+    Score positions based on DG coverage. 
+
+    For the subtraction-based approach: If a single arm (either left or 
+    right) overlaps a given position, subtract DG coveragefrom iSHARC
+    coverage. 
+
+    For the low_confidence cleanup approach: If a single arm overlaps a 
+    position, keep the coverage value. Only subtract by the lowest confidence 
+    DGs whenever there is an overlap of DG arms.
 
     Args: 
         bedpe_dict: {DG:[l_chr, l_start, l_end, 
                     r_chr, r_start, r_end, coverage]}
         gene_coverage: {gene:{position: coverage}}
-
+        method: subtract OR confidence
     Returns:
         (updated) gene_coverage: {gene:{position: coverage}}
     """
-    # Subtraction based on all DGs approach
-    if subtract_all:
-        for DG, dg_data in bedpe_dict.items():
-            (l_chr, l_start, l_end, 
-            r_chr, r_start, r_end, 
+    # Subtraction: Removes coverage based on all DG coverage
+    if method == 'subtract':
+        for dg_key, dg_data in bedpe_dict.items():
+            (l_chr, l_start, l_end, r_chr, r_start, r_end, 
             coverage, _) = dg_data
             for gene in gene_coverage:
                 for pos in range(l_start, l_end + 1):
@@ -220,19 +215,48 @@ def coverage_isolation(gene_coverage, bedpe_dict,
                 for pos in range(r_start, r_end + 1):
                     if pos in gene_coverage[gene]:
                         gene_coverage[gene][pos] -= coverage
-    
-    # Update the regions by subtracting only low confidence DGs. 
-    for dg_key, dg_data in bedpe_dict.items():
-        (left_chr, left_start, left_end, 
-        right_chr, right_start, right_end, 
-        coverage, confidence) = dg_data
-        
-        # Parse the bedpe_dict.items() for the lowest confidence DG,
-        # subtract the coverage in gene_coverage by the DG coverage 
-        # at the positions that have an overlap of DG arms.  
 
-    print('\n', gene_coverage)
-    return gene_coverage
+    # Confidence: subtract lowest conf DG coverage from gene_coverage.
+    elif method == 'confidence':
+        conf_pos = {}; low_conf_per_pos = {}  
+        for dg_key, dg_data in bedpe_dict.items():
+            (l_chr, l_start, l_end, r_chr, r_start, r_end, 
+            coverage, confidence) = dg_data
+
+            for position in range(l_start, r_end + 1):
+                conf_pos.setdefault(position, []).append(confidence)
+                if position not in low_conf_per_pos:
+                    low_conf_per_pos[position] = \
+                        (dg_key, coverage, confidence)
+                else:
+                    _, _, existing_confidence = \
+                        low_conf_per_pos[position]
+                    if confidence < existing_confidence:
+                        low_conf_per_pos[position] = \
+                        (dg_key, coverage, confidence)
+
+        # Iterate through position with multiple confidence values
+        num_low_conf_reads = 2
+        for position, dg_info_list in conf_pos.items():
+            if len(dg_info_list) > 1:
+                # Sort low_conf_per_pos by conf, get lowest conf
+                lowset_conf_reads = sorted(dg_info_list, key=lambda x: x[2])[:num_low_conf_reads]
+                print("Lowest confidence reads:", lowest_conf_reads)
+                for dg_key, coverage, _ in lowest_conf_reads:
+                    # Subtract coverage from the gene in gene_coverage
+                    for gene, positions in gene_coverage.items():
+                        if position in positions:
+                            gene_coverage[gene][position] -= coverage
+                            break
+
+    else:
+        print(f"Method must either be 'subtract' or 'confidence'.")
+        sys.exit()
+
+
+
+    print(gene_coverage)
+    return(gene_coverage)
 
 def cov_to_bed(gene_coverage):
     """
@@ -333,20 +357,24 @@ NOTE: Arguments must be provided in the following order:
 3. bedpe_file:      The PATH of the *.bedpe file generated after CRSSANT 
                     analysis (DG assembly) is complete.
 
-OPTIONAL ARGUMENTS:
+4. method:          "confidence" or "subtraction"
 
--s, --subtract:     Defines the coverage scoring method. Use total subtraction
+                    Defines the coverage scoring method. Use total subtraction
                     based method instead of partial updating based on lowest 
                     DG coverage. For reads with overlapping positions, iSHARC 
                     read coverage is subtracted by the total number of DG 
                     coverage. This is only recommended for iSHARC reads at 
                     high coverage and sparsely populated DG data.
 
+OPTIONAL ARGUMENTS:
+
+--dgs, --min_dg:    the number of low confidence DGs to remove the coverage by. 
+
 ###########################################################################
             """),
     usage=
 """\
-\npython3 %(prog)s annotation-(bed) iSHARC-(bam) CRSSANT-(bedpe)
+\npython3 %(prog)s annotation iSHARC CRSSANT method
 """)
     parser.add_argument('annotation', 
         help='PATH to annotation bed file.')
@@ -354,8 +382,8 @@ OPTIONAL ARGUMENTS:
         help='PATH to iSHARC data file, provided in BAM format.')
     parser.add_argument('bedpe_file', 
         help='PATH to the .bedpe file generated by CRSSANT analysis')
-    parser.add_argument('-s', '--subtract-all', action='store_true',
-        help='Optional parameter to subtract by all DG coverage.')
+    parser.add_argument('method',
+        help='Either "confidence" or "subtract" to clean up coverage.')
     return parser.parse_args()
 
 def main():
@@ -366,7 +394,7 @@ def main():
     isharc_bam = args.isharc_file
     bedpe = args.bedpe_file
     # Check for optional argument
-    method = args.subtract_all
+    method = args.method
 
     # Start collecting gene regions based on annotation file.
     print(timenow(), f"Collecting gene regions from {annotation}...")
