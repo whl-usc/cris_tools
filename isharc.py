@@ -294,41 +294,18 @@ def optimized_coverage_isolation(gene_coverage, bedpe_dict,
         for dg_key, dg_data in bedpe_dict.items():
             (l_chr, l_start, l_end, r_chr, r_start, r_end, 
             coverage, _) = dg_data
+            # Create sets of positions overlapped by the left and right arms
             l_positions = {(l_chr, pos) for pos in range(l_start, l_end + 1)}
             r_positions = {(r_chr, pos) for pos in range(r_start, r_end + 1)}
+            # Iterate through gene coverage and subtract coverage where positions overlap
             for gene, positions in gene_coverage.items():
-                gene_coverage[gene].update({pos: positions[pos] - coverage for
-                    pos in positions if pos in l_positions or 
-                    pos in r_positions})
+                # Filter positions to include only those on the same chromosome as the arms
+                gene_positions = {pos: positions[pos] for pos in positions if isinstance(pos, tuple) and (pos[0] == l_chr or pos[0] == r_chr)}
+                gene_coverage[gene].update({pos: gene_positions[pos] - coverage for pos in gene_positions if pos in l_positions or pos in r_positions})
 
     # Confidence: subtract lowest conf DG coverage from gene_coverage.
     elif method == 'confidence':
-        conf_pos = {}; low_conf_per_pos = {}          
-        for dg_key, dg_data in bedpe_dict.items():
-            (l_chr, l_start, l_end, r_chr, r_start, r_end, 
-            coverage, confidence) = dg_data
-            for position in range(l_start, r_end + 1):
-                conf_pos.setdefault(position, []).append((dg_key, confidence))
-                dg_info = (dg_key, coverage, confidence)
-                if position not in low_conf_per_pos:
-                    low_conf_per_pos[position] = [dg_info]
-                else:
-                    low_conf_per_pos[position].append(dg_info)
-
-        # Iterate through position with multiple confidence values
-        num_low_conf_pos = int(dg_count)
-        for position, dg_info_list in conf_pos.items():
-            if len(dg_info_list) > 1:
-                # Sort low_conf_per_pos by conf, get lowest conf
-                sorted_dg_info = sorted(dg_info_list, key=lambda x: x[1]) 
-                lowest_conf_dg_info = sorted_dg_info[:num_low_conf_pos]
-                # Subtract coverage by lowest confidence DGs
-                for dg_key, _ in lowest_conf_dg_info:
-                    coverage = bedpe_dict[dg_key][-2] # Coverage values
-                    for gene, positions in gene_coverage.items():
-                        if position in positions:
-                            gene_coverage[gene][position] -= coverage
-                            break
+        pass
 
     else:
         print(f"Method must either be 'subtract' or 'confidence'.")
