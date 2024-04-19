@@ -268,7 +268,7 @@ def coverage_isolation(gene_coverage, bedpe_dict,
     if debug: print(gene_coverage,'\n')
     return(gene_coverage)
 
-def optimized_coverage_isolation(gene_coverage, bedpe_dict,
+def optimized_coverage_isolation(gene_regions, gene_coverage, bedpe_dict,
     method, dg_count, debug=False):
     """
     Optimized versions of the functions that score positions based on DG
@@ -279,9 +279,10 @@ def optimized_coverage_isolation(gene_coverage, bedpe_dict,
     by the lowest confidence DG(s) whenever there is an overlap of DG arms.
 
     Args: 
+        gene_regions: {gene: [chromosome, start, stop]}
+        gene_coverage: {gene:{position: coverage}}
         bedpe_dict: {DG:[l_chr, l_start, l_end, 
                     r_chr, r_start, r_end, coverage]}
-        gene_coverage: {gene:{position: coverage}}
         method: subtract OR confidence
     (optional)
         dg_count: number of low confidence DGs to update coverage by
@@ -291,17 +292,31 @@ def optimized_coverage_isolation(gene_coverage, bedpe_dict,
     """
     # Subtraction: Removes coverage based on all DG coverage
     if method == 'subtract':
+        gene_regions_by_chr = {}
+        for gene, (chr, start, end) in gene_regions.items():
+            gene_regions_by_chr.setdefault(chr, []).append((gene, start, end))
+        gene_coverage_set = {(gene, pos) for gene, 
+            positions in gene_coverage.items() for pos in positions}
+
         for dg_key, dg_data in bedpe_dict.items():
             (l_chr, l_start, l_end, r_chr, r_start, r_end, 
             coverage, _) = dg_data
-            # Create sets of positions overlapped by the left and right arms
-            l_positions = {(l_chr, pos) for pos in range(l_start, l_end + 1)}
-            r_positions = {(r_chr, pos) for pos in range(r_start, r_end + 1)}
-            # Iterate through gene coverage and subtract coverage where positions overlap
-            for gene, positions in gene_coverage.items():
-                # Filter positions to include only those on the same chromosome as the arms
-                gene_positions = {pos: positions[pos] for pos in positions if isinstance(pos, tuple) and (pos[0] == l_chr or pos[0] == r_chr)}
-                gene_coverage[gene].update({pos: gene_positions[pos] - coverage for pos in gene_positions if pos in l_positions or pos in r_positions})
+
+            if l_chr in gene_regions_by_chr:
+                for gene, start, end in gene_regions_by_chr[l_chr]:
+                    if l_start <= end and l_end >= start:
+                        for pos in range(max(l_start, start), 
+                            min(l_end, end) + 1):
+                            if (gene, pos) in gene_coverage_set:
+                                gene_coverage[gene][pos] -= coverage
+
+            if r_chr in gene_regions_by_chr:
+                for gene, start, end in gene_regions_by_chr[r_chr]:
+                    if r_start <= end and r_end >= start:
+                        for pos in range(max(r_start, start), 
+                            min(r_end, end) + 1):
+                            if (gene, pos) in gene_coverage_set:
+                                gene_coverage[gene][pos] -= coverage
 
     # Confidence: subtract lowest conf DG coverage from gene_coverage.
     elif method == 'confidence':
@@ -476,10 +491,10 @@ def main():
         print("\n" + timenow(), 
         f"Updating coverage scores based on DG overlaps...\n")
     bedpe_dict = parse_bedpe(bedpe, args.debug)
-    new_coverage = coverage_isolation(gene_coverage_dict, bedpe_dict,
-       method, dgs, args.debug)
-    new_coverage = optimized_coverage_isolation(gene_coverage_dict, 
-        bedpe_dict, method, dgs, args.debug)
+    # new_coverage = coverage_isolation(gene_coverage_dict, bedpe_dict,
+       # method, dgs, args.debug)
+    new_coverage = optimized_coverage_isolation(gene_regions, 
+        gene_coverage_dict, bedpe_dict, method, dgs, args.debug)
 
     if '_pri_crssant_' in bedpe: 
         output = bedpe.split('.cliques')[0]
