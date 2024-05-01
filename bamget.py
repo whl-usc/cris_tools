@@ -866,7 +866,7 @@ BAM file containing gapped_1 and trans reads, determine highly covered
 positions based on coverage per gene region in the annotation file. Outputs 
 are written to the BED6 file, which can be directly used for DG assembly.
 
-NOTE: Arguments should only be provided in the following order:
+NOTE: Arguments must be provided in the following order:
 
 1. analysis_type:       Available options: 'gene', 'position'
 
