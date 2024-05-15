@@ -72,7 +72,7 @@ import textwrap
 import time
 
 ###########################################################################
-# 1. Basic functions that common to either analyses function.
+# 1. Basic functions common to either analyses function.
 
 def timenow():
     """
