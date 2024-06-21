@@ -78,7 +78,7 @@ def intersect(alignbed, genebed, output):
     Returns:
         bedgraph: 
     """
-    print(str(datetime.now())[:-7], "Reading alignment bed file, calculating",
+    print(str(datetime.now())[:-7], "Reading alignment bed file, calculating"
         "overlap...")
 
     # Intersect the alignment and gene bedfiles.
