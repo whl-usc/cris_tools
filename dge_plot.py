@@ -43,91 +43,73 @@ def read_input(input_file, phenotype_file, gene_name, tissue_types):
     Returns combined dataframe with normalized_count and renamed columns.
     """
     # Read input expression file
-    with gzip.open(input_file, 'rt') as file:
-        count_df = pd.read_csv(file, sep='\t')
+    if "gzip" in str(input_file):
+        with gzip.open(input_file, 'rt') as file:
+            count_df = pd.read_csv(file, sep='\t')
+    else:
+        with open(input_file, 'rt') as file:
+            count_df = pd.read_csv(file, sep='\t')
     
     # Check the DataFrame shape and search for appropriate gene 
-    first_gene = count_df.iloc[0, 0]
-
-    if count_df.shape[0] == 1 and first_gene == gene_name:
-        print(f"Plotting data for {first_gene}.")
+    if count_df.shape[0] == 1 and count_df.iloc[0, 0] == gene_name:
+        print(f"Processing data for {gene_name}.")
         norm_count = count_df
 
     else:
         print(f"Searching data for {gene_name}.")
         norm_count = count_df[count_df.iloc[:, 0] == gene_name]
 
+    norm_count = norm_count.transpose().reset_index()
+    norm_count.columns = ['identifier', 'Expression']
+    expression = norm_count[1:]
+
     # Read phenotype description file
-    with gzip.open(phenotype_file, 'rt') as file:
+    with gzip.open(phenotype_file, 'rt', errors='replace') as file:
         phenotype_df = pd.read_csv(file, sep='\t')
 
-    # Function to find matching phenotype category for a given row
-    def find_matching_category(row):
-        for tissue in tissue_types:
-            if tissue in row[2]:
-                return tissue
-            elif tissue in row[1]:
-                return tissue
-        return row[0]
+    """
+    Phenotype file is separated into these columns:
+        1) sample
+        2) detailed_category
+        3) primary disease or tissue
+        4) _primary_site
+        5) _sample_type
+        6) _gender
+        7) _study
+    """
+    # Process phenotype information
+    phenotype_df['_primary_site'] = phenotype_df['_primary_site'].str.title()
 
-    phenotype_dict = {row[0]: find_matching_category(row) for index, 
-        row in phenotype_df.iterrows()}
-    
-    norm_count.columns = [phenotype_dict.get(col, col) for col 
-        in norm_count.columns]
+    # Merge and update identifier based on phenotype information
+    merged_count = pd.merge(expression, phenotype_df, 
+        left_on='identifier', right_on='sample', how='left')
 
-    norm_df = norm_count.stack().groupby(level=1, 
-        group_keys=True).apply(list).apply(pd.Series).T
-    norm_df.drop(columns=['sample'], inplace=True)
-    norm_df.to_csv(f'{gene_name}.csv', index=False)
+    def get_sample_type(sample_type):
+        if pd.isna(sample_type):
+            return 'Other'
+        elif 'Normal' in sample_type:
+            return 'Normal'
+        elif 'Tumor' in sample_type:
+            return 'Tumor'
+        else:
+            return 'Other'
 
-    # print(norm_df)
-    return norm_df
+    merged_count['identifier'] = merged_count.apply(
+        lambda row: 
+        f"{row['_primary_site']} "
+        f"{get_sample_type(row['_sample_type'])}", axis=1)
+
+    # Select and reorder columns
+    merged_count = merged_count[['identifier', 'Expression']]
+
+    # Output to CSV
+    merged_count.to_csv(f'{gene_name}_by_tissue.csv', index=False)
 
 def plot(dataframe, gene_name, tissue_types):
     """
     Plot a boxplot of the log2 transformed normalized_counts, 
     separated by phenotype (tissue types) and outputs PNG file.
     """
-    # Define the order of data based on tissue/cancer type.
-    order = [
-        'Adipose Tissue', 
-        'Adrenal Gland', 'ACC', # Adrenocortical carcinoma
-        'Artery',
-        'Bladder', 'BLCA', # Bladder urothelial carcinoma
-        'Blood', 'DLBC', # Diffuse large B-cell lymphoma
-        'Blood Vessel',
-        'Bone Marrow', 'LAML', # Acute myeloid leukemia
-        'Brain', 'GBM', # Glioblastoma multiforme
-        'Breast', 'BRCA', # Breast invasive carcinoma
-        'Cells', 'PCPG', # Pheochromocytoma and paraganglioma
-        'Cervix', 'CESC', # Cervical & endocervical cancer
-        'Colon', 'COAD', # Colon adenocarcinoma
-        'Esophagus', 'ESCA', # Esophageal carcinoma
-        'Fallopian Tube',
-        'Heart',
-        'Kidney', 'KIRC', # Kidney clear cell carcinoma
-        'Liver', 'LIHC', # Liver hepatocellular carcinoma
-        'Lung', 'LUAD', # Lung adenocarcinoma
-        'Muscle',
-        'Nerve',
-        'Ovary', 'OV', # Ovarian serous cystadenocarcinoma
-        'Pancreas', 'PAAD', # Pancreatic adenocarcinoma
-        'Pituitary',
-        'Prostate', 'PRAD', # Prostate adenocarcinoma
-        'Salivary Gland', 
-        'SARC', # Sarcoma
-        'Skin', 'SKCM', # Skin cutaneous melanoma
-        'Small Intestine',
-        'Spleen',
-        'Stomach', 'STAD', # Stomach adenocarcinoma
-        'Testis', 'TGCT', # Testicular germ cell tumor
-        'Thyroid', 'THCA', # Thyroid carcinoma
-        'Uterus', 'UCEC', # Uterine corpus endometrioid carcinoma
-        'Vagina'
-        ]
-
-    data = dataframe.reindex(order, axis=1)
     filtered = data.dropna(subset=['Expression'])
     print(filtered)
 
@@ -207,79 +189,81 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Plot gene expression \
         distribution from input files.')
+    parser.add_argument('input_file', type=str, help='Gene expression count \
+        data file for processing')
     parser.add_argument('gene_name', type=str, help='Gene name to extract \
         expression data for')
     parser.add_argument('working_directory', type=str, help='PATH to working \
-        directory that contains all relevant files')
+        directory; use "." for current directory')
     parser.add_argument('--csv-file', type=str, help='Optional flag, \
-        specifies a CSV file to read data from', default=None)
+        specifies a CSV file to read data from, reduces memory use', 
+        default=None)
 
     args = parser.parse_args()
+    input_file=args.input_file
     gene_name = args.gene_name
     working_directory=args.working_directory
     csv_file = args.csv_file
 
     # Add or remove tissue types as appropriate.
     tissue_types = [
-    "Adipose Tissue",
-    "Adrenal gland",
-    "Adrenal Gland",
-    "Bile duct",
-    "Bladder",
-    "Blood",
-    "Blood Vessel",
-    "Bone Marrow",
-    "Brain",
-    "Breast",
-    "Cervix",
-    "Cervix Uteri",
-    "Colon",
-    "Endometrium",
-    "Esophagus",
-    "Eye",
-    "Fallopian Tube",
-    "Head and Neck region",
-    "Heart",
-    "Kidney",
-    "Lining of body cavities",
-    "Liver",
-    "Lung",
-    "Lymphatic tissue",
-    "Muscle",
-    "Nerve",
-    "Ovary",
-    "Pancreas",
-    "Paraganglia",
-    "Pituitary",
-    "Prostate",
-    "Rectum",
-    "Salivary Gland",
-    "Skin",
-    "Small Intestine",
-    "Soft tissue,Bone",
-    "Spleen",
-    "Stomach",
-    "Sympathetic Nervous System",
-    "Testis",
-    "Thymus",
-    "Thyroid",
-    "Thyroid Gland",
-    "Uterus",
-    "Vagina",
-    "White blood cell"
+        "Adipose Tissue",
+        "Adrenal Gland",
+        "Bile duct",
+        "Bladder",
+        "Blood",
+        "Blood Vessel",
+        "Bone Marrow",
+        "Brain",
+        "Breast",
+        "Cervix",
+        "Cervix Uteri",
+        "Colon",
+        "Endometrium",
+        "Esophagus",
+        "Eye",
+        "Fallopian Tube",
+        "Head and Neck region",
+        "Heart",
+        "Kidney",
+        "Lining of body cavities",
+        "Liver",
+        "Lung",
+        "Lymphatic tissue",
+        "Muscle",
+        "Nerve",
+        "Ovary",
+        "Pancreas",
+        "Paraganglia",
+        "Pituitary",
+        "Prostate",
+        "Rectum",
+        "Salivary Gland",
+        "Skin",
+        "Small Intestine",
+        "Soft tissue,Bone",
+        "Spleen",
+        "Stomach",
+        "Sympathetic Nervous System",
+        "Testis",
+        "Thymus",
+        "Thyroid",
+        "Thyroid Gland",
+        "Uterus",
+        "Vagina",
+        "White blood cell"
     ]
 
     if csv_file:
         combined_df = pd.read_csv(f'{gene_name}.csv')
 
     else:
-        input_file='''TcgaTargetGtex_gene_expected_count.gz'''
         phenotype_file='''TcgaTargetGTEX_phenotype.txt.gz'''
         count_df = read_input(input_file, phenotype_file, 
             gene_name, tissue_types) 
         csv_df = pd.read_csv(f'{gene_name}.csv')
 
-    plot(csv_df, gene_name, tissue_types)
+#    plot(csv_df, gene_name, tissue_types)
 
 if __name__ == "__main__":
     main()
