@@ -12,6 +12,17 @@ __version__ = "1.0.0"
 
 # Version notes
 __update_notes__ = """
+1.1.1
+    -   Added boxplot function, including the counting for datasets. 
+    -   Function to skip processing input files and use CSV instead
+
+1.1.0
+    -   Added CSV output function to increse processing speed.
+
+1.0.1
+    -   Combined input file reading functions to convert sample_ids to tissue
+        type by phenotype file.
+
 1.0.0   
     -   Initial commit, set up outline of logic and functions.
 """
@@ -29,7 +40,7 @@ import textwrap
 ###########################################################################
 # 1. Set up functions
 
-def read_input(input_file, phenotype_file, gene_name, tissue_types):
+def read_input(input_file, phenotype_file, gene_name):
     """
     We highly recommended pre-processing the input files;
         Row 1: sample_ids
@@ -65,7 +76,7 @@ def read_input(input_file, phenotype_file, gene_name, tissue_types):
 
     # Read phenotype description file
     with gzip.open(phenotype_file, 'rt', errors='replace') as file:
-        phenotype_df = pd.read_csv(file, sep='\t')
+        phenotype_df = pd.read_csv(file, sep='\t', encoding='utf-8-sig')
 
     """
     Phenotype file is separated into these columns:
@@ -84,6 +95,20 @@ def read_input(input_file, phenotype_file, gene_name, tissue_types):
     merged_count = pd.merge(expression, phenotype_df, 
         left_on='identifier', right_on='sample', how='left')
 
+"""
+# Need to fix the name filtering. Some issues here.
+
+    merged_count = merged_count.dropna(subset=['_primary_site'])
+
+    merged_count.loc[merged_count['_primary_site'].str.contains(
+        'sympathetic', case=False), 'identifier'] = 'Sympathetic Nervous System'
+    
+    merged_count.loc[merged_count['_primary_site'].str.contains(
+        '"Soft Tissue,Bone Tumor"'), 'identifier'] = 'Soft Tissue or Bone Tumor'
+
+    print(merged_count)
+"""
+
     def get_sample_type(sample_type):
         if pd.isna(sample_type):
             return 'Other'
@@ -99,22 +124,27 @@ def read_input(input_file, phenotype_file, gene_name, tissue_types):
         f"{row['_primary_site']} "
         f"{get_sample_type(row['_sample_type'])}", axis=1)
 
-    # Select and reorder columns
+    # Select and restructure columns
     merged_count = merged_count[['identifier', 'Expression']]
+    transformed_df = (merged_count
+        .set_index('identifier')
+        .stack()
+        .groupby(level=0)
+        .apply(list)
+        .apply(pd.Series)
+        .T)
+    
+    transformed_df.to_csv(f'{gene_name}.csv', index=False)
 
-    # Output to CSV
-    merged_count.to_csv(f'{gene_name}_by_tissue.csv', index=False)
+    return transformed_df
 
 def plot(dataframe, gene_name, tissue_types):
     """
     Plot a boxplot of the log2 transformed normalized_counts, 
     separated by phenotype (tissue types) and outputs PNG file.
     """
-    filtered = data.dropna(subset=['Expression'])
-    print(filtered)
-
-    filtered['Tissue Type'] = pd.Categorical(filtered.index,
-        categories=order, ordered=True)
+    header_row = list(dataframe.columns)
+    print(header_row)
 
     # Calculate counts of data points for each tissue type
     counts = filtered['Tissue Type'].value_counts()
@@ -259,11 +289,11 @@ def main():
 
     else:
         phenotype_file='''TcgaTargetGTEX_phenotype.txt.gz'''
-        count_df = read_input(input_file, phenotype_file, 
-            gene_name, tissue_types) 
-        csv_df = pd.read_csv(f'{gene_name}.csv')
-
-#    plot(csv_df, gene_name, tissue_types)
+        count_df = read_input(
+            input_file, phenotype_file, gene_name) 
+    
+    csv_df = pd.read_csv(f'{gene_name}.csv', encoding='utf-8-sig')
+    plot(csv_df, gene_name, tissue_types)
 
 if __name__ == "__main__":
     main()
