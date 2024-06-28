@@ -95,9 +95,7 @@ def read_input(input_file, phenotype_file, gene_name):
     merged_count = pd.merge(expression, phenotype_df, 
         left_on='identifier', right_on='sample', how='left')
 
-"""
-# Need to fix the name filtering. Some issues here.
-
+    # Need to fix the name filtering. Some issues here.
     merged_count = merged_count.dropna(subset=['_primary_site'])
 
     merged_count.loc[merged_count['_primary_site'].str.contains(
@@ -107,7 +105,6 @@ def read_input(input_file, phenotype_file, gene_name):
         '"Soft Tissue,Bone Tumor"'), 'identifier'] = 'Soft Tissue or Bone Tumor'
 
     print(merged_count)
-"""
 
     def get_sample_type(sample_type):
         if pd.isna(sample_type):
