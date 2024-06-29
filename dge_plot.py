@@ -15,13 +15,18 @@ __update_notes__ = """
 1.1.2
     -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
         "Normal" and "Tumor".
+    -   Added 'Other' tissue type exclusion flag (-x, --exclude)
+    -   Added option to name output figures (-o, --output-prefix)
+    -   Added statistics printout (-s, --stats)
 
 1.1.1
     -   Added boxplot and stripplot function, prints tissue_type count 
         for each of the categories. 
-    -   Function to skip processing input files and use CSV instead
 
 1.1.0
+    -   Add function to skip processing input files and use CSV instead
+        (-csv, --csv-file)
+
     -   Added CSV output function to increse processing speed.
 
 1.0.1
