@@ -14,7 +14,7 @@ __version__ = "1.1.2"
 __update_notes__ = """
 1.1.2
     -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
-        "Normal" and "Tumor".
+        "Normal" and "Tumor" (calc_significance).
     -   Added 'Other' tissue type exclusion flag (-x, --exclude)
     -   Added option to name output figures (-o, --output-prefix)
     -   Added statistics printout (-s, --stats)
@@ -42,6 +42,7 @@ import argparse
 import gzip
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pandas as pd
 from scipy.stats import ranksums
 import seaborn as sns
@@ -154,35 +155,73 @@ def read_input(input_file, phenotype_file, gene_name):
     return transformed_df
 
 def calc_significance(dataframe):
-    # Find pairs of columns with matching tissue types and Normal/Tumor
-    df = dataframe
-    matched_pairs = {}
-    for col in df.columns:
-        if '_Normal' in col:
-            tissue_type = col.replace('_Normal', '')
-            tumor_col = col.replace('_Normal', '_Tumor')
-            if tumor_col in df.columns:
-                matched_pairs[(col, tumor_col)] = (df[col].dropna(), 
-                    df[tumor_col].dropna())
+    """
+    Perform Wilcoxon rank-sum tests between columns with matching names 
+    when stripped of "Normal" or "Tumor". Prints the p-value for each matched 
+    pair and summarizes significance based on the p-values.
 
-    # Perform Wilcoxon rank-sum test for each matched pair
-    results = {}
-    for (norm_col, tumor_col), (norm_values, tumor_values) in \
-        matched_pairs.items():
-        statistic, p_value = ranksums(norm_values, tumor_values)
-        results[(norm_col, tumor_col)] = {'statistic': statistic, 'p_value':
-            p_value}
+    Args:
+        dataframe (pd.DataFrame): A DataFrame containing gene expression data.
 
-    # Print results
-    for key, result in results.items():
-        norm_col, tumor_col = key
-        print(f"Comparison between {norm_col} and {tumor_col}:")
-        print(f"  Wilcoxon rank-sum statistic: {result['statistic']}")
-        print(f"  p-value: {result['p_value']}")
-        print()
+    Returns:
+        dict: A dictionary containing p-values.
+    """
+    p_values = {}; significance_levels = {}
 
-def plot(dataframe, gene_name, output_prefix='', exclude_other=False, 
-    stats=False):
+    # Iterate over unique base names (stripped of "Normal" and "Tumor")
+    for base_name in dataframe.columns.str.replace('Normal|Tumor', '', 
+        regex=True).unique():
+        normal_col = f"{base_name}Normal"
+        tumor_col = f"{base_name}Tumor"
+        
+        # Check if both Normal and Tumor columns exist
+        if normal_col in dataframe.columns and tumor_col in dataframe.columns:
+            normal_values = dataframe[normal_col].dropna()
+            tumor_values = dataframe[tumor_col].dropna()
+            
+            if len(normal_values) > 0 and len(tumor_values) > 0:
+                stat, p_value = ranksums(normal_values, tumor_values)
+                
+                # Define significance level
+                if p_value < 0.001:
+                    significance = '***'
+                elif p_value < 0.01:
+                    significance = '**'
+                elif p_value < 0.05:
+                    significance = '*'
+                else:
+                    significance = ''
+
+                p_values[base_name] = p_value
+                significance_levels[base_name] = significance
+
+            else:
+                print(f"Skipping {normal_col} vs {tumor_col} due to "
+                    f"insufficient data.")
+
+    # Summarize significance findings if any comparisons were made
+    sorted_p_values = sorted(p_values.items(), key=lambda x: x[1])
+
+    if p_values:
+        print(f"Summary of Significance Calculations:\n")
+        for base_name, p_value in sorted_p_values:
+            if p_value < 0.001:
+                significance = '***' 
+            elif p_value < 0.01:
+                significance = '**'
+            elif p_value < 0.05:
+                significance = '*' 
+            else:
+                significance = ''
+
+            print(f"{base_name.rjust(40)}: (p-value = {p_value:.4f}) "
+                f"{significance} ")
+        print("-" * 60)
+
+    return p_values, significance_levels
+
+def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
+        stats=False):
     """
     Generates and saves a plots of the log2 transformed normalized_counts,
     separated by phenotype (tissue types). This function creates a boxplot
@@ -197,7 +236,9 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
             name. Defaults to ''.
         exclude_other (bool, optional): If True, exclude columns containing 
             'Other' from the plot. Defaults to False.
-        
+        stats (bool, optional): If True, includes statistics on the columns that
+            share a common name by varying condition.
+
     Returns:
         None. The plot is saved as a PNG file.
     """
@@ -206,7 +247,7 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
         dataframe = dataframe.loc[:, ~dataframe.columns.str.contains('Other')]
 
     # Lower this number if too strict
-    row_count_filter = dataframe.count() >= 5 
+    row_count_filter = dataframe.count() >= 5
     dataframe = dataframe.loc[:, row_count_filter]
 
     df = pd.melt(dataframe, var_name='tissue_type', value_name='expression')
@@ -215,15 +256,14 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
 
     if stats:
         # Print statistics on tissue types, and number of counts for each.
+        print(f"Summary of datasets:\n")
         tissue_types = filtered_df['tissue_type'].nunique()
-        print(f"\n\t\t     Unique sample types: {tissue_types}")
+        print(f"\t\t     Unique sample types : {tissue_types}")
 
         total_count = filtered_df.shape[0]
-        print(f"\t\t   Total number of reads: {total_count}")
-        print("-" * 60)
-
+        print(f"\t\tTotal number of datasets : {total_count}\n")
         for tissue_type, count in counts_dict.items():
-            print(f"{tissue_type.rjust(40)}: {count}")
+            print(f"{tissue_type.rjust(40)} : {count}")
         print("-" * 60)
 
     # Color mapping for tissue types.
@@ -242,7 +282,7 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
     plt.figure(figsize=(16, 10))
 
     # Define boxplot variables 
-    sns.boxplot(
+    ax = sns.boxplot(
                 x='tissue_type', 
                 y='expression', 
                 data=filtered_df, 
@@ -283,6 +323,7 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
     # Add counts to x-axis labels
     x_labels = [f"{label} (n={counts_dict.get(label, 0)})" 
         for label in filtered_df['tissue_type'].unique()]
+
     plt.xticks(ticks=range(len(x_labels)), labels=x_labels, 
         rotation=90, ha='center', fontsize=8)
 
@@ -306,6 +347,33 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
         )
     legend.get_frame().set_edgecolor('black')
     legend.get_frame().set_facecolor('white')
+
+    if stats:
+        # Add significance annotations above the boxplot groups
+        p_values, significance_levels = calc_significance(dataframe)
+        significance_annotations = {
+            '***': {'color': 'gray', 'alpha': 0.5},
+            '**': {'color': 'gray', 'alpha': 0.5},
+            '*': {'color': 'gray', 'alpha': 0.5}
+        }
+        x_labels = filtered_df['tissue_type'].unique()
+        for base_name, significance in significance_levels.items():
+            if base_name in x_labels:
+                index = np.where(filtered_df['tissue_type'].unique() \
+                    == base_name)[0][0]
+                ax.annotate(
+                    significance, 
+                    (index, filtered_df.loc[filtered_df['tissue_type'] \
+                        == base_name, 'expression'].max()), 
+                    xytext=(0, 10), 
+                    textcoords='offset points', 
+                    ha='center', 
+                    va='center',
+                    color=significance_annotations[significance]['color'], 
+                    fontsize=8, 
+                    fontweight='bold', 
+                    backgroundcolor='white',
+                    alpha=significance_annotations[significance]['alpha'])
 
     # Save the plot as PNG
     output_file = f"{output_prefix}{gene_name}_plot.png"
@@ -385,21 +453,27 @@ def main():
     if csv_file:
         combined_df = pd.read_csv(csv_file)
         print(f"Searching {csv_file} for {gene_name} data.")
+        print("-" * 60)
 
     else:
         if not args.input_file or not args.gene_name:
             parser.error('You must provide input_file and gene_name' \
                 ' if csv-file is not provided.')
         input_file = args.input_file
-        phenotype_file = 'TcgaTargetGTEX_phenotype.txt.gz'
-        
+
+        if os.path.exists('TcgaTargetGTEX_phenotype.txt.gz'):
+            phenotype_file = 'TcgaTargetGTEX_phenotype.txt.gz'
+        else:
+            phenotype_file = '*_phenotype.txt.gz'
+            print(f"Attempting to use file {phenotype_file} as identifier.")
+            
         count_df = read_input(input_file, phenotype_file, gene_name)
         combined_df = count_df
+        print("-" * 60)
     
     if output_prefix:
         output_prefix = str(output_prefix+"_")
 
-    calc_significance(combined_df)
     plot(combined_df, gene_name, output_prefix, exclude_other, stats)
 
 if __name__ == "__main__":
