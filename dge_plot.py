@@ -42,27 +42,40 @@ import argparse
 import gzip
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
 from scipy.stats import ranksums
 import seaborn as sns
-import textwrap
 
 ###########################################################################
 # 1. Set up functions
 
 def read_input(input_file, phenotype_file, gene_name):
     """
-    We highly recommended pre-processing the input files;
-        Row 1: sample_ids
-        Row 2: normalized read counts
+    Processes the input gene expression and phenotype data files to generate 
+    a combined DataFrame with normalized counts and renamed columns.
 
-    Check the row count of input_file. If =2, use file as is. If >2 rows,
-    parse file, search subsequent rows for matching "gene_name". Coverts
-    the input_count dataframe sample_ids to names in the phenotype
-    description file.
+    This function reads the input expression file and phenotype description 
+    file, processes the data to extract and rename columns based on tissue 
+    types and sample categories, and returns a structured DataFrame. It 
+    supports both plain text and gzip-compressed input files.
 
-    Returns combined dataframe with normalized_count and renamed columns.
+    Args:
+        input_file (str): Path to the gene expression count data file.
+        phenotype_file (str): Path to the phenotype description file.
+        gene_name (str): The name of the gene to extract expression data for.
+
+    Returns:
+        pd.DataFrame: A transformed DataFrame with normalized counts and 
+        renamed columns based on tissue types and sample categories.
+    
+    The phenotype file is expected to have the following columns:
+        - sample
+        - detailed_category
+        - primary disease or tissue
+        - _primary_site
+        - _sample_type
+        - _gender
+        - _study
     """
     # Read input expression file
     if "gzip" in str(input_file):
@@ -72,7 +85,7 @@ def read_input(input_file, phenotype_file, gene_name):
         with open(input_file, 'rt') as file:
             count_df = pd.read_csv(file, sep='\t')
     
-    # Check the DataFrame shape and search for appropriate gene 
+    # Check DataFrame shape, search for specified gene
     if count_df.shape[0] == 1 and count_df.iloc[0, 0] == gene_name:
         print(f"Processing data for {gene_name}.")
         norm_count = count_df
@@ -85,20 +98,10 @@ def read_input(input_file, phenotype_file, gene_name):
     norm_count.columns = ['identifier', 'Expression']
     expression = norm_count[1:]
 
-    # Read phenotype description file
+    # Read phenotype description file, process information
     with gzip.open(phenotype_file, 'rt', errors='replace') as file:
         phenotype_df = pd.read_csv(file, sep='\t', encoding='utf-8-sig')
-    """
-    Phenotype file is separated into these columns:
-        1) sample
-        2) detailed_category
-        3) primary disease or tissue
-        4) _primary_site
-        5) _sample_type
-        6) _gender
-        7) _study
-    """
-    # Process phenotype information
+
     phenotype_df['_primary_site'] = phenotype_df['_primary_site'].str.title()
 
     # Merge and update identifier based on phenotype information
@@ -129,8 +132,6 @@ def read_input(input_file, phenotype_file, gene_name):
         .apply(list)
         .apply(pd.Series)
         .T)
-
-    # Update columns names
     transformed_df.columns = [
         'Sympathetic Nervous System Other' if 'sympathetic' in col.lower() \
             and 'other' in col.lower() else 
@@ -142,7 +143,7 @@ def read_input(input_file, phenotype_file, gene_name):
             and 'tumor' in col.lower() else
         col
         for col in transformed_df.columns
-    ]
+        ]
     
     transformed_df = transformed_df.drop(
         columns=['nan Normal', 'nan Other'],axis=1)
@@ -161,13 +162,16 @@ def calc_significance(dataframe):
             tissue_type = col.replace('_Normal', '')
             tumor_col = col.replace('_Normal', '_Tumor')
             if tumor_col in df.columns:
-                matched_pairs[(col, tumor_col)] = (df[col].dropna(), df[tumor_col].dropna())
+                matched_pairs[(col, tumor_col)] = (df[col].dropna(), 
+                    df[tumor_col].dropna())
 
     # Perform Wilcoxon rank-sum test for each matched pair
     results = {}
-    for (norm_col, tumor_col), (norm_values, tumor_values) in matched_pairs.items():
+    for (norm_col, tumor_col), (norm_values, tumor_values) in \
+        matched_pairs.items():
         statistic, p_value = ranksums(norm_values, tumor_values)
-        results[(norm_col, tumor_col)] = {'statistic': statistic, 'p_value': p_value}
+        results[(norm_col, tumor_col)] = {'statistic': statistic, 'p_value':
+            p_value}
 
     # Print results
     for key, result in results.items():
@@ -180,8 +184,22 @@ def calc_significance(dataframe):
 def plot(dataframe, gene_name, output_prefix='', exclude_other=False, 
     stats=False):
     """
-    Plot a boxplot of the log2 transformed normalized_counts, 
-    separated by phenotype (tissue types) and outputs PNG file.
+    Generates and saves a plots of the log2 transformed normalized_counts,
+    separated by phenotype (tissue types). This function creates a boxplot
+    and a strip plot to visualize the expression levels of a specified gene 
+    across different tissue types. It includes options to exclude columns with
+    'Other' in their names. The plot is saved as a PNG file.
+
+    Args:
+        dataframe (pd.DataFrame): A DataFrame containing gene expression data.
+        gene_name (str): The name of the gene to be plotted.
+        output_prefix (str, optional): A prefix to be added to the output file 
+            name. Defaults to ''.
+        exclude_other (bool, optional): If True, exclude columns containing 
+            'Other' from the plot. Defaults to False.
+        
+    Returns:
+        None. The plot is saved as a PNG file.
     """
     # Set up the data.
     if exclude_other:
@@ -299,23 +317,63 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
 
 def main():
     """
-    Main function to set up argument parser and call relevant functions.
+    Main function to set up the argument parser, handle input arguments, 
+    and call the relevant functions for processing and plotting gene 
+    expression data.
+
+    This function supports the following functionalities:
+    - Reading gene expression data from a CSV file or input file.
+    - Extracting gene expression data for a specific gene.
+    - Excluding columns containing "Other" from plotting.
+    - Setting a prefix for the output file names.
+    - Printing statistics on tissue types and counts.
+
+    The function parses command-line arguments, reads the input data, 
+    calculates statistical significance, and generates plots for gene 
+    expression data.
+
+    Args:
+        -csv, --csv-file (str, optional): Path to a CSV file to read data from.
+        input_file (str, optional): Path to the gene expression count data file.
+        gene_name (str): The name of the gene to extract expression data for.
+        -o, --output-prefix (str, optional): Prefix for the output file names.
+        -x, --exclude (bool, optional): Flag to exclude columns containing 
+        "Other" from plotting.
+        -s, --stats (bool, optional): Flag to print statistics on tissue types 
+        and counts.
+
+    Raises:
+        argparse.ArgumentError: If the required arguments are not provided 
+        when --csv-file is not used.
     """
-    parser = argparse.ArgumentParser(description='Plot gene expression \
-        distribution from input files.')
-    parser.add_argument('-csv', '--csv-file', type=str, help='Optional flag, \
-        specifies a CSV file to read data from, reduces memory use', 
+    parser = argparse.ArgumentParser(
+        description='Process, plot gene expression from input files.')
+
+    parser.add_argument(
+        '-csv', '--csv-file', type=str,
+        help='Optional. Path to CSV file. Reduces memory use if specified.',
         default=None)
-    parser.add_argument('input_file', type=str, nargs='?',
-        help='Gene expression count data file for processing')
-    parser.add_argument('gene_name', type=str,
-        help='Gene name to extract expression data for')
-    parser.add_argument('-o', '--output-prefix', type=str, default='',
-        help='Prefix for the output file names')
-    parser.add_argument('-x', '--exclude', action='store_true',
-        help='Exclude columns containing "Other" from plotting')
-    parser.add_argument('-s', '--stats', action='store_true',
-        help='Prints statistics on the tissue types and count')
+
+    parser.add_argument(
+        'input_file', type=str, nargs='?',
+        help=('Required if CSV file (-csv, --csv-file) is not provided. Path to'
+            ' gene expression count data file for processing.'))
+
+    parser.add_argument(
+        'gene_name', type=str,
+        help='The name of the gene to extract expression data for.')
+
+    parser.add_argument(
+        '-o', '--output-prefix', type=str, default='',
+        help='Optional. Prefix for the output file names. Defaults to None.')
+
+    parser.add_argument(
+        '-x', '--exclude', action='store_true',
+        help='Optional. Exclude columns containing "Other" from plotting.')
+
+    parser.add_argument(
+        '-s', '--stats', action='store_true',
+        help='Optional. Prints statistics on the tissue types and counts.')
 
     args = parser.parse_args()
     csv_file = args.csv_file
