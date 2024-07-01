@@ -2,16 +2,22 @@
 contact:    wlee9829@gmail.com
 date:       2024_06_27
 python:     python3.10
-script:     DGE_plot.py
+script:     dge_plot.py
 
 This Python script plots the distribution of log2(x+1) RSEM normalized gene 
 expression counts downloaded from the UCSC Xena web platform.
 """
 # Define version
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 # Version notes
 __update_notes__ = """
+1.1.3
+    -   Added significance value annotations and background that spans the 
+        tissue types in comparison. 
+    -   Added logic when excluding 'Other' tissue types, to warn about
+        statistical test being performed on only 'Normal' vs. 'Tumor'.
+
 1.1.2
     -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
         "Normal" and "Tumor" (calc_significance).
@@ -166,7 +172,8 @@ def calc_significance(dataframe):
     Returns:
         dict: A dictionary containing p-values.
     """
-    p_values = {}; significance_levels = {}
+    p_values = {}
+    significance_levels = {}
 
     # Iterate over unique base names (stripped of "Normal" and "Tumor")
     for base_name in dataframe.columns.str.replace('Normal|Tumor', '', 
@@ -195,33 +202,20 @@ def calc_significance(dataframe):
                 p_values[base_name] = p_value
                 significance_levels[base_name] = significance
 
-            else:
-                print(f"Skipping {normal_col} vs {tumor_col} due to "
-                    f"insufficient data.")
-
     # Summarize significance findings if any comparisons were made
-    sorted_p_values = sorted(p_values.items(), key=lambda x: x[1])
-
     if p_values:
+        sorted_p_values = sorted(p_values.items(), key=lambda x: x[1])
         print(f"Summary of Significance Calculations:\n")
         for base_name, p_value in sorted_p_values:
-            if p_value < 0.001:
-                significance = '***' 
-            elif p_value < 0.01:
-                significance = '**'
-            elif p_value < 0.05:
-                significance = '*' 
-            else:
-                significance = ''
-
-            print(f"{base_name.rjust(40)}: (p-value = {p_value:.4f}) "
+            significance = significance_levels[base_name]
+            print(f"{base_name.rjust(40)}: (p = {p_value:.2e}) "
                 f"{significance} ")
         print("-" * 60)
 
     return p_values, significance_levels
 
-def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
-        stats=False):
+def plot(dataframe, gene_name, output_prefix='', 
+    exclude_other=False, stats=False):
     """
     Generates and saves a plots of the log2 transformed normalized_counts,
     separated by phenotype (tissue types). This function creates a boxplot
@@ -245,26 +239,17 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
     # Set up the data.
     if exclude_other:
         dataframe = dataframe.loc[:, ~dataframe.columns.str.contains('Other')]
+    else:
+        if stats:
+            print(f"NOTE: Statistical analysis ignores 'Other' tissue types"
+                f" and compares between 'Normal' and 'Tumor'.\n")
 
     # Lower this number if too strict
-    row_count_filter = dataframe.count() >= 5
-    dataframe = dataframe.loc[:, row_count_filter]
+    dataframe = dataframe.loc[:, dataframe.count() >= 5]
 
     df = pd.melt(dataframe, var_name='tissue_type', value_name='expression')
     filtered_df = df[df['expression'].notna()]
     counts_dict = filtered_df.groupby('tissue_type').size().to_dict()
-
-    if stats:
-        # Print statistics on tissue types, and number of counts for each.
-        print(f"Summary of datasets:\n")
-        tissue_types = filtered_df['tissue_type'].nunique()
-        print(f"\t\t     Unique sample types : {tissue_types}")
-
-        total_count = filtered_df.shape[0]
-        print(f"\t\tTotal number of datasets : {total_count}\n")
-        for tissue_type, count in counts_dict.items():
-            print(f"{tissue_type.rjust(40)} : {count}")
-        print("-" * 60)
 
     # Color mapping for tissue types.
     def set_color(column_name):
@@ -283,97 +268,131 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
 
     # Define boxplot variables 
     ax = sns.boxplot(
-                x='tissue_type', 
-                y='expression', 
-                data=filtered_df, 
-                hue='tissue_type', 
-                palette=colors, 
-                whis=[0, 100],
-                linewidth=2, 
-                fliersize=0.5, 
-                showcaps=True, 
-                boxprops={'facecolor':'none', 
-                    'edgecolor':'black', 
-                    'linewidth': 0.75}, 
-                whiskerprops={'color':'black', 'linewidth': 0.75}, 
-                medianprops={'color':'black', 'linewidth': 0.75}, 
-                capprops={'color':'gray', 'linewidth': 0.5}
-            )
+            x='tissue_type', 
+            y='expression', 
+            data=filtered_df, 
+            hue='tissue_type', 
+            palette=colors, 
+            whis=[0, 100],
+            linewidth=2, 
+            fliersize=0.5, 
+            showcaps=True, 
+            boxprops={'facecolor':'none', 
+                'edgecolor':'black', 
+                'linewidth': 0.75}, 
+            whiskerprops={'color':'black', 'linewidth': 0.75}, 
+            medianprops={'color':'black', 'linewidth': 0.75}, 
+            capprops={'color':'gray', 'linewidth': 0.5}
+        )
 
     # Define stripplot variables
     sns.stripplot(  
-                x='tissue_type', 
-                y='expression',
-                data=filtered_df, 
-                hue='tissue_type', 
-                palette=colors, 
-                jitter=True, 
-                edgecolor='black', 
-                size=4, 
-                alpha=0.5,
-            )
+            x='tissue_type', 
+            y='expression',
+            data=filtered_df, 
+            hue='tissue_type', 
+            palette=colors, 
+            jitter=True, 
+            edgecolor='black', 
+            size=5, 
+            alpha=0.25,
+            ax=ax
+        )
 
     # Plot labels and title for figure
-    plt.xlabel('', fontsize=8, fontweight='bold')
-    plt.ylabel(f'{gene_name} Expression (Log2(x+1) RSEM Normalized Count)',
+    ax.set_xlabel('', fontsize=8, fontweight='bold')
+    ax.set_ylabel(f'{gene_name} Expression (Log2(x+1) RSEM Normalized Count)',
         fontsize=8, fontweight='bold')
-    plt.title(f'{gene_name} Expression by Tissue Type', fontsize=12,
+    ax.set_title(f'{gene_name} Expression by Tissue Type', fontsize=12,
         fontweight='bold')
 
     # Add counts to x-axis labels
-    x_labels = [f"{label} (n={counts_dict.get(label, 0)})" 
-        for label in filtered_df['tissue_type'].unique()]
-
-    plt.xticks(ticks=range(len(x_labels)), labels=x_labels, 
-        rotation=90, ha='center', fontsize=8)
+    x_labels = filtered_df['tissue_type'].unique()
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels([f"{label} (n={counts_dict.get(label, 0)})" 
+        for label in x_labels], rotation=90, ha='center', fontsize=8)
 
     # Remove spines
-    plt.gca().spines['top'].set_visible(False)
-    plt.gca().spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    if stats:
+        # Print statistics on tissue types, and number of counts for each.
+        print(f"Summary of datasets:\n")
+        tissue_types = filtered_df['tissue_type'].nunique()
+        print(f"\t\t     Unique sample types : {tissue_types}")
+
+        total_count = filtered_df.shape[0]
+        print(f"\t\tTotal number of datasets : {total_count}\n")
+        for tissue_type, count in counts_dict.items():
+            print(f"{tissue_type.rjust(40)} : {count}")
+        print("-" * 60)
+
+        # Add significance annotations above the boxplot groups
+        p_values, significance_levels = calc_significance(dataframe)
+        significance_annotations = {
+            '***': {'color': 'black', 'alpha': 1.0},
+            '**': {'color': 'black', 'alpha': 1.0},
+            '*': {'color': 'black', 'alpha': 1.0},
+            '': {'color': 'black', 'alpha': 0.0}
+        }
+
+        # Calculate mid-points for annotation
+        for base_name, significance in significance_levels.items():
+            normal_label = f"{base_name}Normal"
+            tumor_label = f"{base_name}Tumor"
+            if normal_label in x_labels and tumor_label in x_labels:
+                normal_index = x_labels.tolist().index(normal_label)
+                tumor_index = x_labels.tolist().index(tumor_label)
+                mid_index = (normal_index + tumor_index) / 2
+                y_coord = max(
+                    filtered_df.loc[filtered_df['tissue_type'] == normal_label,
+                        'expression'].max(),
+                    filtered_df.loc[filtered_df['tissue_type'] == tumor_label, 
+                        'expression'].max()
+                )
+                ax.annotate(
+                    significance,
+                    (mid_index, y_coord),
+                    xytext=(0, 10),
+                    textcoords='offset points',
+                    ha='center',
+                    va='center',
+                    color=significance_annotations[significance]['color'],
+                    fontsize=8,
+                    fontweight='bold',
+                    backgroundcolor='none',
+                    alpha=significance_annotations[significance]['alpha']
+                )
+
+                # Calculate span of gray background
+                span_start = min(normal_index, tumor_index) - 0.5
+                span_end = max(normal_index, tumor_index) + 0.5
+
+                # Add gray background behind the annotation
+                ax.axvspan(
+                    span_start, 
+                    span_end, 
+                    alpha=0.05,
+                    edgecolor='black',
+                    linewidth=0.5, 
+                    facecolor='gray', 
+                    zorder=-1)
 
     # Add custom legend
     legend_labels = ['Normal', 'Tumor', 'Other']
     legend_handles = [plt.Line2D([0], [0], 
         marker='o', color='w', markerfacecolor=color, markersize=6) 
         for color in ['blue', 'red', 'gray']]
-    legend = plt.legend(
+    legend = ax.legend(
         legend_handles, 
         legend_labels, 
         loc='upper left',
         frameon=True,
-        handletextpad=0.4,
-        labelspacing=0.3,
+        handletextpad=0.2,
+        labelspacing=0.2,
         borderpad=0.5
         )
-    legend.get_frame().set_edgecolor('black')
-    legend.get_frame().set_facecolor('white')
-
-    if stats:
-        # Add significance annotations above the boxplot groups
-        p_values, significance_levels = calc_significance(dataframe)
-        significance_annotations = {
-            '***': {'color': 'gray', 'alpha': 0.5},
-            '**': {'color': 'gray', 'alpha': 0.5},
-            '*': {'color': 'gray', 'alpha': 0.5}
-        }
-        x_labels = filtered_df['tissue_type'].unique()
-        for base_name, significance in significance_levels.items():
-            if base_name in x_labels:
-                index = np.where(filtered_df['tissue_type'].unique() \
-                    == base_name)[0][0]
-                ax.annotate(
-                    significance, 
-                    (index, filtered_df.loc[filtered_df['tissue_type'] \
-                        == base_name, 'expression'].max()), 
-                    xytext=(0, 10), 
-                    textcoords='offset points', 
-                    ha='center', 
-                    va='center',
-                    color=significance_annotations[significance]['color'], 
-                    fontsize=8, 
-                    fontweight='bold', 
-                    backgroundcolor='white',
-                    alpha=significance_annotations[significance]['alpha'])
 
     # Save the plot as PNG
     output_file = f"{output_prefix}{gene_name}_plot.png"
@@ -381,6 +400,7 @@ def plot(dataframe, gene_name, output_prefix='', exclude_other=False,
     plt.tight_layout()
     plt.savefig(output_file, dpi=400)
     plt.close()
+
     print(f"Plot saved as {output_file}")
 
 def main():
