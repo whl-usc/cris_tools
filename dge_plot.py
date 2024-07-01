@@ -8,10 +8,14 @@ This Python script plots the distribution of log2(x+1) RSEM normalized gene
 expression counts downloaded from the UCSC Xena web platform.
 """
 # Define version
-__version__ = "1.1.3"
+__version__ = "1.2.0"
 
 # Version notes
 __update_notes__ = """
+1.2.0
+    -   Added flag to isolate and generate plots based on specified tissue type 
+        (-t, --tissue). Case sensitive and works with  multiple tissue types.
+
 1.1.3
     -   Added significance value annotations and background that spans the 
         tissue types in comparison. 
@@ -21,9 +25,9 @@ __update_notes__ = """
 1.1.2
     -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
         "Normal" and "Tumor" (calc_significance).
-    -   Added 'Other' tissue type exclusion flag (-x, --exclude)
-    -   Added option to name output figures (-o, --output-prefix)
-    -   Added statistics printout (-s, --stats)
+    -   Added flag to exclude 'Other' tissue type (-x, --exclude)
+    -   Added flag to name output figure (-o, --output-prefix)
+    -   Added flag for statistics printout and annotating figures (-s, --stats)
 
 1.1.1
     -   Added boxplot and stripplot function, prints tissue_type count 
@@ -45,6 +49,7 @@ __update_notes__ = """
 
 # Import Packages
 import argparse
+from datetime import datetime
 import gzip
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,6 +57,8 @@ import os
 import pandas as pd
 from scipy.stats import ranksums
 import seaborn as sns
+import sys
+import textwrap
 
 ###########################################################################
 # 1. Set up functions
@@ -215,7 +222,7 @@ def calc_significance(dataframe):
     return p_values, significance_levels
 
 def plot(dataframe, gene_name, output_prefix='', 
-    exclude_other=False, stats=False):
+    exclude_other=False, stats=False, tissue=None):
     """
     Generates and saves a plots of the log2 transformed normalized_counts,
     separated by phenotype (tissue types). This function creates a boxplot
@@ -232,11 +239,25 @@ def plot(dataframe, gene_name, output_prefix='',
             'Other' from the plot. Defaults to False.
         stats (bool, optional): If True, includes statistics on the columns that
             share a common name by varying condition.
+        tissue (str or None, optional): Comma-separated list of tissue types 
+            (case sensitive) to include. Defaults to None (all tissues).
 
     Returns:
         None. The plot is saved as a PNG file.
     """
     # Set up the data.
+    if tissue:
+        tissue_list = [t.strip() for t in tissue.split(',')]
+        filtered_tissue = [col for col in dataframe.columns
+            if any(t in col for t in tissue_list)]
+        if not filtered_tissue:
+            print(f"Error: One or more of the specified tissue types were not "
+                f" found in the dataset. Check to see if it exists:\n")
+            print("\n".join(dataframe.columns))
+            sys.exit()
+
+        dataframe = dataframe[filtered_tissue]
+
     if exclude_other:
         dataframe = dataframe.loc[:, ~dataframe.columns.str.contains('Other')]
     else:
@@ -351,6 +372,7 @@ def plot(dataframe, gene_name, output_prefix='',
                     filtered_df.loc[filtered_df['tissue_type'] == tumor_label, 
                         'expression'].max()
                 )
+
                 ax.annotate(
                     significance,
                     (mid_index, y_coord),
@@ -373,17 +395,23 @@ def plot(dataframe, gene_name, output_prefix='',
                 ax.axvspan(
                     span_start, 
                     span_end, 
-                    alpha=0.05,
+                    alpha=0.1,
                     edgecolor='black',
                     linewidth=0.5, 
                     facecolor='gray', 
                     zorder=-1)
 
     # Add custom legend
-    legend_labels = ['Normal', 'Tumor', 'Other']
+    if exclude_other:
+        legend_labels = ['Normal', 'Tumor']
+        colors = ['blue', 'red']
+    else:
+        legend_labels = ['Normal', 'Tumor', 'Other']
+        colors = ['blue', 'red', 'gray']
+
     legend_handles = [plt.Line2D([0], [0], 
         marker='o', color='w', markerfacecolor=color, markersize=6) 
-        for color in ['blue', 'red', 'gray']]
+        for color in colors]
     legend = ax.legend(
         legend_handles, 
         legend_labels, 
@@ -401,9 +429,10 @@ def plot(dataframe, gene_name, output_prefix='',
     plt.savefig(output_file, dpi=400)
     plt.close()
 
-    print(f"Plot saved as {output_file}")
+    time = str(datetime.now())[:-7]
+    print(f"Plot saved as {output_file} on {time}.")
 
-def main():
+def parse_args():
     """
     Main function to set up the argument parser, handle input arguments, 
     and call the relevant functions for processing and plotting gene 
@@ -435,7 +464,49 @@ def main():
         when --csv-file is not used.
     """
     parser = argparse.ArgumentParser(
-        description='Process, plot gene expression from input files.')
+    prog="dge_plot.py",
+    formatter_class=argparse.RawTextHelpFormatter,
+    description=textwrap.dedent("""\
+###########################################################################
+
+NOTE: Only the -csv/input_file and gene_name arguments are positional.
+
+1a. -csv, --csv-file:   Curated csv file containing the tissue types as
+                        separate columns and the expression count value as row.
+
+1b. input_file:         Input file (downloaded count.gz) structured with tissue 
+                        types as columns and expression count values as new
+                        rows for every gene.
+
+2. gene_name:           Gene to search data for. Case sensitive.
+
+3. -o, --output-prefix  An output name pre-pending 'gene_name'_plot.png.
+
+4. -x --exclude         Excludes the tissue types that are not defined as either
+                        'Normal' or 'Tumor'
+
+5. -s, --stats          Calculates statistitical difference between pairs of 
+                        tissue 'Normal' vs 'Tumor' and adds significance 
+                        annotations to the plots.
+
+6. -t, --tissue         Specifies which tissue types to isolate plots for.
+                        Case sensitive and must match the tissue types available
+                        in the non-specific plot.
+
+7. -V, --version        Prints version and version updates.
+
+###########################################################################
+"""),
+    usage=
+"""
+    \npython3 %(prog)s input_file gene_name
+
+    Usage examples: 
+
+        %(prog)s TcgaTargetGtex_RSEM_Hugo_norm_count.gz GLP1R [-x, -s, -o]
+
+        %(prog)s -csv=glp1r_counts.csv GLP1R -x -s -o=GLP1R_expression 
+""")
 
     parser.add_argument(
         '-csv', '--csv-file', type=str,
@@ -463,12 +534,27 @@ def main():
         '-s', '--stats', action='store_true',
         help='Optional. Prints statistics on the tissue types and counts.')
 
-    args = parser.parse_args()
+    parser.add_argument(
+        '-t', '--tissue', type=str, default='',
+            help='Specify tissue types to isolate (comma-separated,' 
+            ' case sensitive).')
+
+    parser.add_argument('-V', '--version', action='version', 
+        version=f'%(prog)s: {__version__}\n{__update_notes__}\n', 
+        help='Prints version and update notes.')
+
+    return parser.parse_args()
+
+def main():
+    """
+    Main function.
+    """
     csv_file = args.csv_file
     gene_name = args.gene_name
     output_prefix = args.output_prefix
     exclude_other = args.exclude
     stats = args.stats
+    tissue = args.tissue
 
     if csv_file:
         combined_df = pd.read_csv(csv_file)
@@ -479,6 +565,7 @@ def main():
         if not args.input_file or not args.gene_name:
             parser.error('You must provide input_file and gene_name' \
                 ' if csv-file is not provided.')
+            sys.exit()
         input_file = args.input_file
 
         if os.path.exists('TcgaTargetGTEX_phenotype.txt.gz'):
@@ -494,7 +581,9 @@ def main():
     if output_prefix:
         output_prefix = str(output_prefix+"_")
 
-    plot(combined_df, gene_name, output_prefix, exclude_other, stats)
+    plot(combined_df, gene_name, output_prefix, exclude_other, stats, tissue)
 
 if __name__ == "__main__":
+    args = parse_args()
     main()
+    sys.exit()
