@@ -15,6 +15,7 @@ __update_notes__ = """
 1.2.0
     -   Added flag to isolate and generate plots based on specified tissue type 
         (-t, --tissue). Case sensitive and works with  multiple tissue types.
+    -   Dynamically changing plot width for datasets.
 
 1.1.3
     -   Added significance value annotations and background that spans the 
@@ -35,7 +36,7 @@ __update_notes__ = """
 
 1.1.0
     -   Add function to skip processing input files and use CSV instead
-        (-csv, --csv-file)
+        (-csv, --csv-file). 
 
     -   Added CSV output function to increse processing speed.
 
@@ -92,7 +93,7 @@ def read_input(input_file, phenotype_file, gene_name):
         - _study
     """
     # Read input expression file
-    if "gzip" in str(input_file):
+    if "gz" in str(input_file):
         with gzip.open(input_file, 'rt') as file:
             count_df = pd.read_csv(file, sep='\t')
     else:
@@ -212,7 +213,7 @@ def calc_significance(dataframe):
     # Summarize significance findings if any comparisons were made
     if p_values:
         sorted_p_values = sorted(p_values.items(), key=lambda x: x[1])
-        print(f"Summary of Significance Calculations:\n")
+        print(f"Summary of significance calculations:\n")
         for base_name, p_value in sorted_p_values:
             significance = significance_levels[base_name]
             print(f"{base_name.rjust(40)}: (p = {p_value:.2e}) "
@@ -250,11 +251,24 @@ def plot(dataframe, gene_name, output_prefix='',
         tissue_list = [t.strip() for t in tissue.split(',')]
         filtered_tissue = [col for col in dataframe.columns
             if any(t in col for t in tissue_list)]
-        if not filtered_tissue:
-            print(f"Error: One or more of the specified tissue types were not "
-                f" found in the dataset. Check to see if it exists:\n")
-            print("\n".join(dataframe.columns))
-            sys.exit()
+
+        # Check for tissue types that may include typo.
+        missing_tissues = [t for t in tissue_list if not any(t in col 
+            for col in dataframe.columns)]
+
+        if missing_tissues:
+            # Error if there are no tissues found with specified type.
+            if not filtered_tissue:
+                print(f"ERROR: None of the specified tissue(s) were found in"
+                 f" the dataset. Check to see if it exists here:\n")
+                print("\n".join(dataframe.columns))
+                sys.exit()
+
+            print(f"WARNING: The following tissues could not be located"
+                f" within the dataset: ")
+            print(f"\n{', '.join(missing_tissues)}")
+            print(f"\nOmitting and continuing...")
+            print("-" * 60)
 
         dataframe = dataframe[filtered_tissue]
 
@@ -285,7 +299,9 @@ def plot(dataframe, gene_name, output_prefix='',
         if col != 'tissue_type']
 
     # Set figure parameters
-    plt.figure(figsize=(16, 10))
+    num_tissues = len(filtered_df['tissue_type'].unique())
+    fig_width = min(num_tissues, 16)
+    plt.figure(figsize=(fig_width, 8))
 
     # Define boxplot variables 
     ax = sns.boxplot(
@@ -332,6 +348,7 @@ def plot(dataframe, gene_name, output_prefix='',
     ax.set_xticks(range(len(x_labels)))
     ax.set_xticklabels([f"{label} (n={counts_dict.get(label, 0)})" 
         for label in x_labels], rotation=90, ha='center', fontsize=8)
+    ax.set_xlim(-0.75, num_tissues + 0.75)
 
     # Remove spines
     ax.spines['top'].set_visible(False)
@@ -473,8 +490,10 @@ NOTE: Only the -csv/input_file and gene_name arguments are positional.
 
 1a. -csv, --csv-file:   Curated csv file containing the tissue types as
                         separate columns and the expression count value as row.
+                        Highly recommended to increase plotting speed when a
+                        gene can be extracted.
 
-1b. input_file:         Input file (downloaded count.gz) structured with tissue 
+1b. input_file:         Input file (.txt or .gz) structured with tissue 
                         types as columns and expression count values as new
                         rows for every gene.
 
