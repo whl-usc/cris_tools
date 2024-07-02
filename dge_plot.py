@@ -8,10 +8,13 @@ This Python script plots the distribution of log2(x+1) RSEM normalized gene
 expression counts downloaded from the UCSC Xena web platform.
 """
 # Define version
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # Version notes
 __update_notes__ = """
+1.2.1
+    -   Rotate x-axis labels for readability and spacing.
+
 1.2.0
     -   Added flag to isolate and generate plots based on specified tissue type 
         (-t, --tissue). Case sensitive and works with  multiple tissue types.
@@ -347,7 +350,8 @@ def plot(dataframe, gene_name, output_prefix='',
     x_labels = filtered_df['tissue_type'].unique()
     ax.set_xticks(range(len(x_labels)))
     ax.set_xticklabels([f"{label} (n={counts_dict.get(label, 0)})" 
-        for label in x_labels], rotation=90, ha='center', fontsize=8)
+        for label in x_labels], rotation=45, rotation_mode='anchor', 
+            ha='right', fontsize=8)
     ax.set_xlim(-0.75, num_tissues + 0.75)
 
     # Remove spines
