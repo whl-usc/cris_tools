@@ -427,14 +427,14 @@ def plot(dataframe, gene_name, output_prefix='',
         colors = ['blue', 'red', 'gray']
 
     legend_handles = [plt.Line2D([0], [0], 
-        marker='o', color='w', markerfacecolor=color, markersize=6) 
+        marker='o', color='w', markerfacecolor=color, markersize=5) 
         for color in colors]
     legend = ax.legend(
         legend_handles, 
         legend_labels, 
-        loc='upper left',
+        loc='upper right',
         frameon=True,
-        handletextpad=0.2,
+        handletextpad=0.1,
         labelspacing=0.2,
         borderpad=0.5
         )
