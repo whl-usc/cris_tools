@@ -568,7 +568,7 @@ NOTE: Only the -csv/input_file and gene_name arguments are positional.
 
     return parser.parse_args()
 
-def main():
+def main(args):
     """
     Main function.
     """
@@ -608,5 +608,5 @@ def main():
 
 if __name__ == "__main__":
     args = parse_args()
-    main()
+    main(args)
     sys.exit()
