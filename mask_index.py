@@ -4,7 +4,7 @@ date:       2024_04_01
 python:     python3.10
 script:     mask_index.py
 
-This script assesses indices based  on a given sequence and input FASTA file. 
+This script assesses indices based on a given sequence and input FASTA file. 
 """
 # Define version
 __version__="1.1.0"
