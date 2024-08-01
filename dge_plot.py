@@ -8,39 +8,68 @@ This Python script plots the distribution of log2(x+1) RSEM normalized gene
 expression counts downloaded from the UCSC Xena web platform.
 """
 # Define version
-__version__ = "1.2.1"
+__version__ = "2.0.0"
+
+# Usage notes 
+"""
+Removed the following tissues because there is no comparable normal to tumor:
+
+    Adipose Tissue Normal
+    Blood Normal
+    Blood Vessel Normal 
+    Eye Tumor
+    Fallopian Tube Normal
+    Heart Normal
+    Lining of Body Cavities Tumor
+    Lymphatic Tissue Tumor
+    Muscle Normal
+    Nerve Normal
+    Paraganglia Tumor
+    Pituitary Normal
+    Salivary Gland Normal
+    Small Intestine Normal
+    Soft Tissue or Bone Tumor
+    Spleen Normal
+    Nervous System Tumor
+    Thymus Tumor
+    Vagina Normal
+"""
 
 # Version notes
 __update_notes__ = """
-1.2.1
+2.0.0
+    -   Edited script to exclude list of tissues or samples that have no 
+        normal to tumor comparison.
+    -   Combined tissue types from same source.
+
+1.4.1
     -   Rotate x-axis labels for readability and spacing.
 
-1.2.0
+1.4.0
     -   Added flag to isolate and generate plots based on specified tissue type 
         (-t, --tissue). Case sensitive and works with  multiple tissue types.
     -   Dynamically changing plot width for datasets.
 
-1.1.3
+1.3.1
     -   Added significance value annotations and background that spans the 
         tissue types in comparison. 
     -   Added logic when excluding 'Other' tissue types, to warn about
         statistical test being performed on only 'Normal' vs. 'Tumor'.
 
-1.1.2
+1.3.0
     -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
         "Normal" and "Tumor" (calc_significance).
     -   Added flag to exclude 'Other' tissue type (-x, --exclude)
     -   Added flag to name output figure (-o, --output-prefix)
     -   Added flag for statistics printout and annotating figures (-s, --stats)
 
-1.1.1
+1.2.0
     -   Added boxplot and stripplot function, prints tissue_type count 
         for each of the categories. 
 
 1.1.0
     -   Add function to skip processing input files and use CSV instead
         (-csv, --csv-file). 
-
     -   Added CSV output function to increse processing speed.
 
 1.0.1
@@ -416,7 +445,7 @@ def plot(dataframe, gene_name, output_prefix='',
                 ax.axvspan(
                     span_start, 
                     span_end, 
-                    alpha=0.1,
+                    alpha=0.05,
                     edgecolor='black',
                     linewidth=0.5, 
                     facecolor='gray', 
@@ -492,7 +521,7 @@ def parse_args():
 
 NOTE: Only the -csv/input_file and gene_name arguments are positional.
 
-1a. -csv, --csv-file:   Curated csv file containing the tissue types as
+1a. -csv, --csv-file    Curated csv file containing the tissue types as
                         separate columns and the expression count value as row.
                         Highly recommended to increase plotting speed when a
                         gene can be extracted.
@@ -506,7 +535,8 @@ NOTE: Only the -csv/input_file and gene_name arguments are positional.
 3. -o, --output-prefix  An output name pre-pending 'gene_name'_plot.png.
 
 4. -x --exclude         Excludes the tissue types that are not defined as either
-                        'Normal' or 'Tumor'
+                        'Normal' or 'Tumor'. Optionally input a list of tissue
+                        or sample types to exclude.
 
 5. -s, --stats          Calculates statistitical difference between pairs of 
                         tissue 'Normal' vs 'Tumor' and adds significance 
@@ -551,7 +581,8 @@ NOTE: Only the -csv/input_file and gene_name arguments are positional.
 
     parser.add_argument(
         '-x', '--exclude', action='store_true',
-        help='Optional. Exclude columns containing "Other" from plotting.')
+        help='Optional. Exclude columns containing "Other" from plotting. '
+        'Can include comma separated list of tissues/sample names to exclude')
 
     parser.add_argument(
         '-s', '--stats', action='store_true',
@@ -581,6 +612,7 @@ def main(args):
 
     if csv_file:
         combined_df = pd.read_csv(csv_file)
+
         print(f"Searching {csv_file} for {gene_name} data.")
         print("-" * 60)
 
@@ -603,6 +635,81 @@ def main(args):
     
     if output_prefix:
         output_prefix = str(output_prefix+"_")
+
+    # Data cleanup - columns without comparison.
+    exclude_tissues = [
+        "Adipose Tissue Normal",
+        "Blood Normal",
+        "Blood Vessel Normal",
+        "Eye Tumor",
+        "Fallopian Tube Normal",
+        "Heart Normal",
+        "Lining Of Body Cavities Tumor",
+        "Lymphatic Tissue Tumor",
+        "Muscle Normal",
+        "Nerve Normal",
+        "Paraganglia Tumor",
+        "Pituitary Normal",
+        "Salivary Gland Normal",
+        "Small Intestine Normal",
+        "Soft Tissue or Bone Tumor",
+        "Spleen Normal",
+        "Nervous System Tumor",
+        "Thymus Tumor",
+        "Vagina Normal"
+    ]
+
+    combined_df = combined_df.drop(
+        columns=[col for col in combined_df.columns if any(
+        exclude in col for exclude in exclude_tissues)]
+    )
+
+    # Data cleanup - naming conventions fix.
+    combined_df.rename(columns={
+        'Cervix Uteri Normal': 'Cervix Normal',
+        'Head And Neck Region Normal': 'Head And Neck Normal',
+        'Head And Neck Region Tumor': 'Head And Neck Tumor',
+        'Thyroid Gland Tumor': 'Thyroid Tumor'
+    }, inplace=True)
+
+    # Data cleanup - concatenating same tissue types 
+    def concatenate_columns(df, columns_to_concat, new_column_name):
+        concatenated_list = [item for col in columns_to_concat 
+        for item in df[col].tolist()] 
+
+        return pd.DataFrame({new_column_name: concatenated_list})
+
+    uterus_endometrium_normal = concatenate_columns(
+        combined_df, 
+        ['Uterus Normal', 'Endometrium Normal'], 
+        'Uterus Normal'
+    )
+    uterus_endometrium_tumor = concatenate_columns(
+        combined_df, 
+        ['Uterus Tumor', 'Endometrium Tumor'], 
+        'Uterus Tumor'
+    )
+    thyroid_gland_normal = concatenate_columns(
+        combined_df, 
+        ['Thyroid Normal', 'Thyroid Gland Normal'], 
+        'Thyroid Normal'
+    )
+    
+    combined_df = combined_df.drop(columns=[
+        'Endometrium Normal',
+        'Endometrium Tumor',
+        'Thyroid Gland Normal',
+        'Thyroid Normal',
+        'Uterus Normal', 
+        'Uterus Tumor',
+    ])
+
+    combined_df = pd.concat([
+        combined_df, 
+        thyroid_gland_normal,
+        uterus_endometrium_normal, 
+        uterus_endometrium_tumor,
+    ], axis=1)
 
     plot(combined_df, gene_name, output_prefix, exclude_other, stats, tissue)
 
