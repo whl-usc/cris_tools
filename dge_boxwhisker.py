@@ -2,7 +2,7 @@
 contact:    wlee9829@gmail.com
 date:       2024_06_27
 python:     python3.10
-script:     dge_plot.py
+script:     dge_boxwhisker.py
 
 This Python script plots the distribution of log2(x+1) RSEM normalized gene 
 expression counts downloaded from the UCSC Xena web platform.
