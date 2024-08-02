@@ -10,37 +10,48 @@ expression counts downloaded from the UCSC Xena web platform.
 # Define version
 __version__ = "2.0.0"
 
-# Usage notes 
-"""
-Removed the following tissues because there is no comparable normal to tumor:
-
-    Adipose Tissue Normal
-    Blood Normal
-    Blood Vessel Normal 
-    Eye Tumor
-    Fallopian Tube Normal
-    Heart Normal
-    Lining of Body Cavities Tumor
-    Lymphatic Tissue Tumor
-    Muscle Normal
-    Nerve Normal
-    Paraganglia Tumor
-    Pituitary Normal
-    Salivary Gland Normal
-    Small Intestine Normal
-    Soft Tissue or Bone Tumor
-    Spleen Normal
-    Nervous System Tumor
-    Thymus Tumor
-    Vagina Normal
-"""
-
 # Version notes
 __update_notes__ = """
 2.0.0
-    -   Edited script to exclude list of tissues or samples that have no 
-        normal to tumor comparison.
+    -   Edited script to exclude tissues or samples that have no normal to
+        tumor comparison. Removed the following tissues:
+
+        Adipose Tissue Normal
+        Blood Normal
+        Blood Vessel Normal 
+        Eye Tumor
+        Fallopian Tube Normal
+        Heart Normal
+        Lining of Body Cavities Tumor
+        Lymphatic Tissue Tumor
+        Muscle Normal
+        Nerve Normal
+        Paraganglia Tumor
+        Pituitary Normal
+        Salivary Gland Normal
+        Small Intestine Normal
+        Soft Tissue or Bone Tumor
+        Spleen Normal
+        Nervous System Tumor
+        Thymus Tumor
+        Vagina Normal
+
     -   Combined tissue types from same source.
+
+        Uterus Normal + Endometrium Normal = Uterus Normal
+        Uterus Tumor + Endometrium Tumor = Uterus Tumor
+        Thyroid Normal + Thyroid Gland Normal = Thyroid Normal
+
+    -   Renamed certain tissue types for consistent style.
+
+        Cervix Uteri Normal: Cervix Normal
+        Head And Neck Region Normal: Head And Neck Normal
+        Head And Neck Region Tumor: Head And Neck Tumor
+        Thyroid Gland Tumor: Thyroid Tumor
+
+    -   Note on "Normal" tissues.
+        TCGA matched normal - solid tissue taken from tissue adjacent to tumor
+        GTEx normal - normal tissue of individuals who do not have cancer
 
 1.4.1
     -   Rotate x-axis labels for readability and spacing.
@@ -194,8 +205,7 @@ def read_input(input_file, phenotype_file, gene_name):
     
     transformed_df = transformed_df.drop(
         columns=['nan Normal', 'nan Other'],axis=1)
-    transformed_df.to_csv(f'{gene_name}.csv', index=False)
-    
+
     # Print the transformed DataFrame
     # print(transformed_df)
     return transformed_df
@@ -610,6 +620,11 @@ def main(args):
     stats = args.stats
     tissue = args.tissue
 
+    if output_prefix:
+        output_prefix = str(output_prefix+"_")
+    else:
+        output_prefix = ""
+
     if csv_file:
         combined_df = pd.read_csv(csv_file)
 
@@ -632,85 +647,85 @@ def main(args):
         count_df = read_input(input_file, phenotype_file, gene_name)
         combined_df = count_df
         print("-" * 60)
-    
-    if output_prefix:
-        output_prefix = str(output_prefix+"_")
 
-    # Data cleanup - columns without comparison.
-    exclude_tissues = [
-        "Adipose Tissue Normal",
-        "Blood Normal",
-        "Blood Vessel Normal",
-        "Eye Tumor",
-        "Fallopian Tube Normal",
-        "Heart Normal",
-        "Lining Of Body Cavities Tumor",
-        "Lymphatic Tissue Tumor",
-        "Muscle Normal",
-        "Nerve Normal",
-        "Paraganglia Tumor",
-        "Pituitary Normal",
-        "Salivary Gland Normal",
-        "Small Intestine Normal",
-        "Soft Tissue or Bone Tumor",
-        "Spleen Normal",
-        "Nervous System Tumor",
-        "Thymus Tumor",
-        "Vagina Normal"
-    ]
+        # Data cleanup - columns without comparison.
+        exclude_tissues = [
+            "Adipose Tissue Normal",
+            "Blood Normal",
+            "Blood Vessel Normal",
+            "Eye Tumor",
+            "Fallopian Tube Normal",
+            "Heart Normal",
+            "Lining Of Body Cavities Tumor",
+            "Lymphatic Tissue Tumor",
+            "Muscle Normal",
+            "Nerve Normal",
+            "Paraganglia Tumor",
+            "Pituitary Normal",
+            "Salivary Gland Normal",
+            "Small Intestine Normal",
+            "Soft Tissue or Bone Tumor",
+            "Spleen Normal",
+            "Nervous System Tumor",
+            "Thymus Tumor",
+            "Vagina Normal"
+        ]
 
-    combined_df = combined_df.drop(
-        columns=[col for col in combined_df.columns if any(
-        exclude in col for exclude in exclude_tissues)]
-    )
+        combined_df = combined_df.drop(
+            columns=[col for col in combined_df.columns if any(
+            exclude in col for exclude in exclude_tissues)]
+        )
 
-    # Data cleanup - naming conventions fix.
-    combined_df.rename(columns={
-        'Cervix Uteri Normal': 'Cervix Normal',
-        'Head And Neck Region Normal': 'Head And Neck Normal',
-        'Head And Neck Region Tumor': 'Head And Neck Tumor',
-        'Thyroid Gland Tumor': 'Thyroid Tumor'
-    }, inplace=True)
+        # Data cleanup - naming conventions fix.
+        combined_df.rename(columns={
+            'Cervix Uteri Normal': 'Cervix Normal',
+            'Head And Neck Region Normal': 'Head And Neck Normal',
+            'Head And Neck Region Tumor': 'Head And Neck Tumor',
+            'Thyroid Gland Tumor': 'Thyroid Tumor'
+        }, inplace=True)
 
-    # Data cleanup - concatenating same tissue types 
-    def concatenate_columns(df, columns_to_concat, new_column_name):
-        concatenated_list = [item for col in columns_to_concat 
-        for item in df[col].tolist()] 
+        # Data cleanup - concatenating same tissue types 
+        def concatenate_columns(df, columns_to_concat, new_column_name):
+            concatenated_list = [item for col in columns_to_concat 
+            for item in df[col].tolist()] 
 
-        return pd.DataFrame({new_column_name: concatenated_list})
+            return pd.DataFrame({new_column_name: concatenated_list})
 
-    uterus_endometrium_normal = concatenate_columns(
-        combined_df, 
-        ['Uterus Normal', 'Endometrium Normal'], 
-        'Uterus Normal'
-    )
-    uterus_endometrium_tumor = concatenate_columns(
-        combined_df, 
-        ['Uterus Tumor', 'Endometrium Tumor'], 
-        'Uterus Tumor'
-    )
-    thyroid_gland_normal = concatenate_columns(
-        combined_df, 
-        ['Thyroid Normal', 'Thyroid Gland Normal'], 
-        'Thyroid Normal'
-    )
-    
-    combined_df = combined_df.drop(columns=[
-        'Endometrium Normal',
-        'Endometrium Tumor',
-        'Thyroid Gland Normal',
-        'Thyroid Normal',
-        'Uterus Normal', 
-        'Uterus Tumor',
-    ])
+        uterus_endometrium_normal = concatenate_columns(
+            combined_df, 
+            ['Uterus Normal', 'Endometrium Normal'], 
+            'Uterus Normal'
+        )
+        uterus_endometrium_tumor = concatenate_columns(
+            combined_df, 
+            ['Uterus Tumor', 'Endometrium Tumor'], 
+            'Uterus Tumor'
+        )
+        thyroid_gland_normal = concatenate_columns(
+            combined_df, 
+            ['Thyroid Normal', 'Thyroid Gland Normal'], 
+            'Thyroid Normal'
+        )
+        
+        combined_df = combined_df.drop(columns=[
+            'Endometrium Normal',
+            'Endometrium Tumor',
+            'Thyroid Gland Normal',
+            'Thyroid Normal',
+            'Uterus Normal', 
+            'Uterus Tumor',
+        ])
 
-    combined_df = pd.concat([
-        combined_df, 
-        thyroid_gland_normal,
-        uterus_endometrium_normal, 
-        uterus_endometrium_tumor,
-    ], axis=1)
+        combined_df = pd.concat([
+            combined_df, 
+            thyroid_gland_normal,
+            uterus_endometrium_normal, 
+            uterus_endometrium_tumor,
+        ], axis=1)
 
+        combined_df.to_csv(f'{output_prefix}{gene_name}.csv', index=False)
+
+    combined_df = combined_df.sort_index(axis=1)
     plot(combined_df, gene_name, output_prefix, exclude_other, stats, tissue)
 
 if __name__ == "__main__":
