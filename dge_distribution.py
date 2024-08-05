@@ -36,31 +36,35 @@ def plot_expression_histograms(file_path1, file_path2, separated, output):
     separate CSV files.
 
     Args:
-        file_path1 (str): Path to the CSV file containing expression data for the first gene.
-        file_path2 (str): Path to the CSV file containing expression data for the second gene.
-        gene1 (str): Name of the first gene.
-        gene2 (str): Name of the second gene.
+        file_path1 (str): CSV file containing expression data for first gene.
+        file_path2 (str): CSV file containing expression data for second gene.
     """
     data1 = pd.read_csv(file_path1)
     data2 = pd.read_csv(file_path2)
 
-    gene1 = file_path1.replace("RSEM_", "").replace("DSEQ2_", "").replace(".csv", "")
-    gene2 = file_path2.replace("RSEM_", "").replace("DSEQ2_", "").replace(".csv", "")
+    gene1 = file_path1.replace("RSEM_", "").replace("DSEQ2_", 
+        "").replace(".csv", "")
+    gene2 = file_path2.replace("RSEM_", "").replace("DSEQ2_", 
+        "").replace(".csv", "")
 
     melted_data1 = data1.melt(var_name='Tissue', 
         value_name='Expression Count').dropna()
     melted_data2 = data2.melt(var_name='Tissue', 
         value_name='Expression Count').dropna()
 
-    mw_stat, mw_p_value = mannwhitneyu(melted_data1['Expression Count'], melted_data2['Expression Count'], alternative='two-sided')
+    mw_stat, mw_p_value = mannwhitneyu(melted_data1['Expression Count'],
+        melted_data2['Expression Count'], alternative='two-sided')
 
-    print(f"Mann-Whitney U Test: Statistic={mw_stat:.2e}, p-value={mw_p_value:.2e}")
+    print(f"Mann-Whitney U Test: Statistic={mw_stat:.2e}," 
+        f" p-value={mw_p_value:.2e}")
 
     plt.figure(figsize=(10, 6))
 
-    sns.histplot(melted_data1['Expression Count'], edgecolor=None, bins=30, color='grey', label=gene1, alpha=0.85)
-    sns.histplot(melted_data2['Expression Count'], edgecolor=None, bins=30, color='black', label=gene2, alpha=0.85)
-
+    sns.histplot(melted_data1['Expression Count'], edgecolor=None, bins=30,
+        color='grey', label=gene1, alpha=0.85)
+    sns.histplot(melted_data2['Expression Count'], edgecolor=None, bins=30,
+        color='black', label=gene2, alpha=0.85)
+    sns.despine()
     plt.title('Gene Expression Counts')
     plt.xlabel('Gene Expression (log2(x+1) Count)')
     plt.ylabel('Frequency (Number of Samples)')
@@ -101,9 +105,13 @@ NOTE: The input strings are positional.
 """
     \npython3 %(prog)s file_path1 file_path2
 """)
-    parser.add_argument('file_path1', type=str, help='Path to the CSV file for the first gene.')
-    parser.add_argument('file_path2', type=str, help='Path to the CSV file for the second gene.')
-    parser.add_argument('-s', '--separated', type=str, help='Pool sample types or keep separate. Default is none, which pools all tissue types ',
+    parser.add_argument('file_path1', type=str, 
+        help='Path to the CSV file for the first gene.')
+    parser.add_argument('file_path2', type=str, 
+        help='Path to the CSV file for the second gene.')
+    parser.add_argument('-s', '--separated', type=str, 
+        help='Pool sample types or keep separate. Default is none, '
+            'which pools all tissue types ',
         default=False)
     parser.add_argument(
         '-o', '--output', type=str, help='Filename for saving the plot')
@@ -115,7 +123,8 @@ def main():
     Main function to execute the script.
     """
     args = parse_args()
-    plot_expression_histograms(args.file_path1, args.file_path2, args.separated, args.output)
+    plot_expression_histograms(args.file_path1, args.file_path2, 
+        args.separated, args.output)
 
 if __name__ == "__main__":
     main()
