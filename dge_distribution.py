@@ -99,7 +99,7 @@ NOTE: The input strings are positional.
 """),
     usage=
 """
-    \npython3 %(prog)s file_path1 file_path2 gene1 gene2
+    \npython3 %(prog)s file_path1 file_path2
 """)
     parser.add_argument('file_path1', type=str, help='Path to the CSV file for the first gene.')
     parser.add_argument('file_path2', type=str, help='Path to the CSV file for the second gene.')
