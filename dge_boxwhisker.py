@@ -142,12 +142,11 @@ def read_input(input_file, phenotype_file, gene_name):
     else:
         with open(input_file, 'rt') as file:
             count_df = pd.read_csv(file, sep='\t')
-    
+
     # Check DataFrame shape, search for specified gene
     if count_df.shape[0] == 1 and count_df.iloc[0, 0] == gene_name:
         print(f"Processing data for {gene_name}.")
         norm_count = count_df
-
     else:
         print(f"Searching data for {gene_name}.")
         norm_count = count_df[count_df.iloc[:, 0] == gene_name]
@@ -482,6 +481,20 @@ def plot(dataframe, gene_name, output_prefix='',
         borderpad=0.5
         )
 
+    # Add alternating background colors for every two samples
+    tissue_types = filtered_df['tissue_type'].unique()
+    num_tissues = len(tissue_types)
+    for i in range(0, num_tissues, 2):
+        span_start = i - 0.5
+        span_end = min(i + 1.5, num_tissues - 0.5)
+        ax.axvspan(
+            span_start, 
+            span_end, 
+            alpha=0.1, 
+            color='lightgray',
+            zorder=-1
+        )
+        
     # Save the plot as PNG
     output_file = f"{output_prefix}{gene_name}_plot.png"
     plt.subplots_adjust(bottom=0.1)
@@ -627,7 +640,6 @@ def main(args):
 
     if csv_file:
         combined_df = pd.read_csv(csv_file)
-
         print(f"Searching {csv_file} for {gene_name} data.")
         print("-" * 60)
 
@@ -678,7 +690,7 @@ def main(args):
 
         # Data cleanup - naming conventions fix.
         combined_df.rename(columns={
-            'Cervix Uteri Normal': 'Cervix Normal',
+            'Cervix Normal' : 'Cervix Normal 1',
             'Head And Neck Region Normal': 'Head And Neck Normal',
             'Head And Neck Region Tumor': 'Head And Neck Tumor',
             'Thyroid Gland Tumor': 'Thyroid Tumor'
@@ -707,7 +719,15 @@ def main(args):
             'Thyroid Normal'
         )
         
+        cervix_normal = concatenate_columns(
+            combined_df, 
+            ['Cervix Normal 1', 'Cervix Uteri Normal'], 
+            'Cervix Normal'
+        )
+
         combined_df = combined_df.drop(columns=[
+            'Cervix Normal 1',
+            'Cervix Uteri Normal',
             'Endometrium Normal',
             'Endometrium Tumor',
             'Thyroid Gland Normal',
@@ -718,6 +738,7 @@ def main(args):
 
         combined_df = pd.concat([
             combined_df, 
+            cervix_normal,
             thyroid_gland_normal,
             uterus_endometrium_normal, 
             uterus_endometrium_tumor,

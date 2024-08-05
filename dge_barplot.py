@@ -91,27 +91,34 @@ def data_cleanup(dataframe, tissue_types):
         normal_values = dataframe[f'{tissue_type} Normal']
         tumor_values = dataframe[f'{tissue_type} Tumor']
 
-        # Drop NaN values
+        # Combined dataframe columns
         combined_data = pd.DataFrame({'Normal': normal_values, 
-            'Tumor': tumor_values}).dropna()
-        normal_cleaned = combined_data['Normal']
-        tumor_cleaned = combined_data['Tumor']
+            'Tumor': tumor_values})
+
+        normal_cleaned = combined_data['Normal'].dropna()
+        tumor_cleaned = combined_data['Tumor'].dropna()
 
         # Convert log2 values back to original scale
-        normal_original = 2**normal_cleaned - 1
-        tumor_original = 2**tumor_cleaned - 1
+        normal_original = (2**normal_cleaned - 1)
+        tumor_original = (2**tumor_cleaned - 1)
 
-        # Calculate means and fold change
+        # Calculate means and log2 fold change
         mean_normal = np.mean(normal_original)
         mean_tumor = np.mean(tumor_original)
-        fold_change = mean_tumor / mean_normal
 
-        # Perform t-test
-        _, p_value = ttest_ind(normal_original, tumor_original, equal_var=False)
+        if mean_normal == 0 or mean_tumor == 0:
+            fold_change_log2 = np.nan
+            p_value = 1.0
+        else:
+            fold_change_log2 = np.log2(mean_tumor / mean_normal)
+
+            # Perform t-test
+            _, p_value = ttest_ind(normal_original, tumor_original, 
+                equal_var=False)
 
         # Calculate -log10(p-value)
         neg_log_p_value = -np.log10(p_value) if p_value <= 0.05 else 0
-
+        
         # Determine significance stars
         if p_value <= 0.001:
             significance = '***'
@@ -119,16 +126,16 @@ def data_cleanup(dataframe, tissue_types):
             significance = '**'
         elif p_value <= 0.05:
             significance = '*'
-        else:
+        else: 
             significance = ''
 
         # Append results
-        relative_expression.append(
-            [tissue_type, fold_change, neg_log_p_value, significance])
+        relative_expression.append([tissue_type, fold_change_log2, 
+            neg_log_p_value, significance])
 
     # Convert to DataFrame for plotting
-    expression_data = pd.DataFrame(relative_expression, columns=[
-        'Tissue Type', 'Fold Change', 'Significance', 'Stars'])
+    expression_data = pd.DataFrame(relative_expression, columns=['Tissue Type',
+        'Fold Change (log2)', 'Significance', 'Stars'])
     expression_data = expression_data.set_index('Tissue Type')
 
     # Ensure x-axis values are categorical
@@ -138,21 +145,16 @@ def data_cleanup(dataframe, tissue_types):
 
     # Define color map and norm for fold change
     cmap = plt.get_cmap('coolwarm')
-    norm = Normalize(vmin=expression_data['Fold Change'].min(),
-                     vmax=expression_data['Fold Change'].max())
-
+    # norm = Normalize(vmin=expression_data['Fold Change (log2)'].min(),
+    #                  vmax=expression_data['Fold Change (log2)'].max(),
+    #                  clip=True)
+    norm = Normalize(vmin=-5, vmax=5, clip=True)
+    
     return expression_data, cmap, norm
 
 def plot(expression_data, cmap, norm, output_file):
     """
     Generate and save a bar plot summarizing fold change and significance.
-
-    Args:
-        expression_data (pd.DataFrame): DataFrame containing fold change and
-                                        significance data.
-        cmap (matplotlib.colors.ListedColormap): Colormap for fold change.
-        norm (matplotlib.colors.Normalize): Normalization instance fold change.
-        output_file (str): Filename for saving the plot.
     """
     # Define tissue types
     tissue_types = [
@@ -163,18 +165,18 @@ def plot(expression_data, cmap, norm, output_file):
     ]
 
     # Set up figure and axes
-    fig, ax = plt.subplots(figsize=(10, 2.5))
+    fig, ax = plt.subplots(figsize=(12, 3))
 
     # Plot alternating background colors
     for i, tissue_type in enumerate(tissue_types):
         if i % 2 == 0:
-            ax.axvspan(i - 0.5, i + 0.5, facecolor='lightgray', alpha=0.25)
+            ax.axvspan(i - 0.5, i + 0.5, facecolor='lightgray', alpha=0.20)
 
     # Plot small boxes with color representing fold change
     sns.scatterplot(
         x='Tissue Type',
         y=0,
-        hue='Fold Change',
+        hue='Fold Change (log2)',
         palette=cmap,
         data=expression_data,
         s=600,
@@ -188,25 +190,26 @@ def plot(expression_data, cmap, norm, output_file):
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     cbar = plt.colorbar(sm, ax=ax, orientation='vertical', 
         fraction=0.005, pad=0)
-    cbar.set_label('Fold Change')
+    cbar.set_label('Fold Change (log2)')
 
     # Annotate significance stars above each marker
     for index, row in expression_data.iterrows():
-        ax.text(index, 0.03,
+        ax.text(index, 0.05,
                 row['Stars'],
                 ha='center', va='bottom', fontsize=12, color='black')
 
     # Plot labels and title for figure
     ax.set_xlabel('Tissue Type')
     ax.set_ylabel('-log$_{10}$(p)')
+    ax.set_ylim(-0.2, 0.2)
     ax.set_title('Tumor vs. Normal (Fold Change)', 
-        fontsize=12, fontweight='bold')
+        fontsize=10, fontweight='bold')
 
     # Set x-tick labels with counts
     x_labels = expression_data['Tissue Type']
     ax.set_xticks(range(len(x_labels)))
-    ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor',
-                       ha='right', fontsize=8)
+    ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor', 
+        ha='right', fontsize=8)
 
     # Remove y-axis ticks and spines
     ax.yaxis.set_visible(False)
@@ -253,8 +256,8 @@ NOTE: The input and output strings are positional.
         help='Path to the CSV file containing gene expression data.')
     parser.add_argument(
         '-o', '--output', type=str, 
-        default='sig_box.png',
-        help='Filename for saving the plot (default: "sig_box.png.")')
+        default='significance.png',
+        help='Filename for saving the plot (default: "significance.png.")')
 
     return parser.parse_args()
 
