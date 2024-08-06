@@ -68,8 +68,8 @@ __update_notes__ = """
         statistical test being performed on only 'Normal' vs. 'Tumor'.
 
 1.3.0
-    -   Add the Wilcoxon rank-sum (Mann-Whitney U) test on columns with paired 
-        "Normal" and "Tumor" (calc_significance).
+    -   Add the Mann-Whitney U test on columns with paired "Normal" and "Tumor"
+        (calc_significance).
     -   Added flag to exclude 'Other' tissue type (-x, --exclude)
     -   Added flag to name output figure (-o, --output-prefix)
     -   Added flag for statistics printout and annotating figures (-s, --stats)
@@ -99,7 +99,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
-from scipy.stats import ranksums
+from scipy.stats import mannwhitneyu
 import seaborn as sns
 import sys
 import textwrap
@@ -236,7 +236,8 @@ def calc_significance(dataframe):
             tumor_values = dataframe[tumor_col].dropna()
             
             if len(normal_values) > 0 and len(tumor_values) > 0:
-                stat, p_value = ranksums(normal_values, tumor_values)
+                stat, p_value = mannwhitneyu(normal_values, tumor_values,
+                    alternative='two-sided')
                 
                 # Define significance level
                 if p_value < 0.001:
@@ -484,14 +485,17 @@ def plot(dataframe, gene_name, output_prefix='',
     # Add alternating background colors for every two samples
     tissue_types = filtered_df['tissue_type'].unique()
     num_tissues = len(tissue_types)
+    colors = ['lightgray', 'white']
+
     for i in range(0, num_tissues, 2):
         span_start = i - 0.5
         span_end = min(i + 1.5, num_tissues - 0.5)
+        color = colors[(i // 2) % 2]
         ax.axvspan(
             span_start, 
             span_end, 
             alpha=0.1, 
-            color='lightgray',
+            color=color,
             zorder=-1
         )
         
@@ -499,7 +503,8 @@ def plot(dataframe, gene_name, output_prefix='',
     output_file = f"{output_prefix}{gene_name}_plot.png"
     plt.subplots_adjust(bottom=0.1)
     plt.tight_layout()
-    plt.savefig(output_file, dpi=400)
+    plt.savefig(f"{output_file}.png", dpi=400)
+    plt.savefig(f"{output_file}.svg", dpi=400)
     plt.close()
 
     time = str(datetime.now())[:-7]
@@ -555,7 +560,7 @@ NOTE: Only the -csv/input_file and gene_name arguments are positional.
 
 2. gene_name:           Gene to search data for. Case sensitive.
 
-3. -o, --output-prefix  An output name pre-pending 'gene_name'_plot.png.
+3. -o, --output-prefix  An output name preceding 'gene_name'_plot.png.
 
 4. -x --exclude         Excludes the tissue types that are not defined as either
                         'Normal' or 'Tumor'. Optionally input a list of tissue

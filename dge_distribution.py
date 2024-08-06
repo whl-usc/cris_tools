@@ -1,6 +1,6 @@
 """
 contact:    wlee9829@gmail.com
-date:       2024_08_02
+date:       2024_08_04
 python:     python3.10
 script:     dge_distribution.py
 
@@ -9,10 +9,14 @@ expression counts downloaded from the UCSC Xena web platform.
 """
 
 # Define version
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Version notes
 __update_notes__ = """
+1.1.0
+    -   Edited function to only extract "tumor" (cancer) samples.
+    -   Changed alpha of box facecolor to lower number.
+
 1.0.0
     -   Initial commit, set up function logic and styling.
 """
@@ -30,7 +34,7 @@ import textwrap
 ###########################################################################
 # 1. Set up functions
 
-def plot_expression_histograms(file_path1, file_path2, separated, output):
+def plot_expression_histograms(file_path1, file_path2, output):
     """
     Plot histograms of RNA expression counts for two specified genes from
     separate CSV files.
@@ -42,14 +46,42 @@ def plot_expression_histograms(file_path1, file_path2, separated, output):
     data1 = pd.read_csv(file_path1)
     data2 = pd.read_csv(file_path2)
 
+    # Define the valid tissue types
+    tissue_types = [
+        'Adrenal Gland', 'Bile Duct', 'Bladder', 'Brain', 'Breast',
+        'Cervix', 'Colon', 'Esophagus', 'Head And Neck', 'Kidney',
+        'Liver', 'Lung', 'Ovary', 'Pancreas', 'Prostate', 'Rectum',
+        'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'
+    ]
+
+    def filter_tumor_columns(data, tissue_types):
+        """
+        Filter columns in the DataFrame to include only those ending with
+        'Tumor' and whose base names are in the provided tissue_types list.
+        
+        Args:
+            data (pd.DataFrame): The DataFrame to filter.
+            tissue_types (list): List of valid tissue types.
+        
+        Returns:
+            pd.DataFrame: DataFrame with filtered columns.
+        """    
+        valid_columns = [col for col in data.columns if col.endswith('Tumor')
+            and col.replace(' Tumor', '') in tissue_types]
+    
+        return data[valid_columns]
+
+    tumor_data1 = filter_tumor_columns(data1, tissue_types)
+    tumor_data2 = filter_tumor_columns(data2, tissue_types)
+
     gene1 = file_path1.replace("RSEM_", "").replace("DSEQ2_", 
         "").replace(".csv", "")
     gene2 = file_path2.replace("RSEM_", "").replace("DSEQ2_", 
         "").replace(".csv", "")
 
-    melted_data1 = data1.melt(var_name='Tissue', 
+    melted_data1 = tumor_data1.melt(var_name='Tissue', 
         value_name='Expression Count').dropna()
-    melted_data2 = data2.melt(var_name='Tissue', 
+    melted_data2 = tumor_data2.melt(var_name='Tissue', 
         value_name='Expression Count').dropna()
 
     mw_stat, mw_p_value = mannwhitneyu(melted_data1['Expression Count'],
@@ -61,17 +93,17 @@ def plot_expression_histograms(file_path1, file_path2, separated, output):
     plt.figure(figsize=(10, 6))
 
     sns.histplot(melted_data1['Expression Count'], edgecolor=None, bins=30,
-        color='grey', label=gene1, alpha=0.85)
+        color='grey', label=gene1, alpha=0.75)
     sns.histplot(melted_data2['Expression Count'], edgecolor=None, bins=30,
-        color='black', label=gene2, alpha=0.85)
+        color='black', label=gene2, alpha=0.75)
     sns.despine()
-    plt.title('Gene Expression Counts')
+    plt.title('Gene Expression Counts (Tumor Samples)')
     plt.xlabel('Gene Expression (log2(x+1) Count)')
     plt.ylabel('Frequency (Number of Samples)')
     plt.legend()
 
     # Add p-value text to the plot
-    plt.text(0.25, 0.95, f'Mann-Whitney p-value={mw_p_value:.2e}', 
+    plt.text(0.25, 0.95, f'p={mw_p_value:.2e}', 
              transform=plt.gca().transAxes, fontsize=8, 
              verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
 
@@ -99,6 +131,14 @@ def parse_args():
         description=textwrap.dedent("""\
 ###########################################################################
 NOTE: The input strings are positional.
+
+1. file_path1:      Input file (.csv) structured with tissue types as columns
+                    and expression count values as new rows for every gene.
+
+2. file_path2:      See above.
+
+3. -o, --output-prefix  An output name preceding 'gene_name'_plot.png.
+
 ###########################################################################
 """),
     usage=
@@ -109,10 +149,6 @@ NOTE: The input strings are positional.
         help='Path to the CSV file for the first gene.')
     parser.add_argument('file_path2', type=str, 
         help='Path to the CSV file for the second gene.')
-    parser.add_argument('-s', '--separated', type=str, 
-        help='Pool sample types or keep separate. Default is none, '
-            'which pools all tissue types ',
-        default=False)
     parser.add_argument(
         '-o', '--output', type=str, help='Filename for saving the plot')
 
@@ -123,8 +159,7 @@ def main():
     Main function to execute the script.
     """
     args = parse_args()
-    plot_expression_histograms(args.file_path1, args.file_path2, 
-        args.separated, args.output)
+    plot_expression_histograms(args.file_path1, args.file_path2, args.output)
 
 if __name__ == "__main__":
     main()

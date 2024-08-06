@@ -10,10 +10,14 @@ platform.
 """
 
 # Define version
-__version__ = "1.1.0"
+__version__ = "1.2.1"
 
 # Version notes
 __update_notes__ = """
+1.2.1
+    -   Statistical comparisons switched to a Mann-Whitney U Test.
+    -   Remove the background coloring for easier viewing.
+
 1.2.0
     -   Break sections into functions.
     -   Add argument parsing for output file names.
@@ -29,7 +33,7 @@ __update_notes__ = """
 # Import Packages
 from datetime import datetime
 from matplotlib.colors import Normalize
-from scipy.stats import ttest_ind
+from scipy.stats import mannwhitneyu
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
@@ -112,13 +116,13 @@ def data_cleanup(dataframe, tissue_types):
         else:
             fold_change_log2 = np.log2(mean_tumor / mean_normal)
 
-            # Perform t-test
-            _, p_value = ttest_ind(normal_original, tumor_original, 
-                equal_var=False)
+            # Perform Mann-Whitney U test
+            _, p_value = mannwhitneyu(normal_original, tumor_original,
+                alternative='two-sided')
 
         # Calculate -log10(p-value)
         neg_log_p_value = -np.log10(p_value) if p_value <= 0.05 else 0
-        
+  
         # Determine significance stars
         if p_value <= 0.001:
             significance = '***'
@@ -167,10 +171,10 @@ def plot(expression_data, cmap, norm, output_file):
     # Set up figure and axes
     fig, ax = plt.subplots(figsize=(12, 3))
 
-    # Plot alternating background colors
-    for i, tissue_type in enumerate(tissue_types):
-        if i % 2 == 0:
-            ax.axvspan(i - 0.5, i + 0.5, facecolor='lightgray', alpha=0.20)
+    # # Plot alternating background colors
+    # for i, tissue_type in enumerate(tissue_types):
+    #     if i % 2 == 0:
+    #         ax.axvspan(i - 0.5, i + 0.5, facecolor='lightgray', alpha=0.20)
 
     # Plot small boxes with color representing fold change
     sns.scatterplot(
@@ -221,7 +225,9 @@ def plot(expression_data, cmap, norm, output_file):
     plt.tight_layout()
 
     # Save and show plot
-    plt.savefig(output_file, dpi=400)
+    plt.savefig(f"{output_file}.png", dpi=400)
+    plt.savefig(f"{output_file}.svg", dpi=400)
+
     plt.show()
 
     time = str(datetime.now())[:-7]
@@ -244,7 +250,7 @@ NOTE: The input and output strings are positional.
 1. input_file:      Input file (.csv) structured with tissue types as columns
                     and expression count values as new rows for every gene.
 
-2. -o, --output     An output file name, defaults to "sig_box.png".
+2. -o, --output     An output file name, defaults to "significance.png".
 ###########################################################################
 """),
     usage=
@@ -276,7 +282,10 @@ def main(args):
     ]
 
     input_file = args.file_path
-    output = args.output
+    if output:
+        output = args.output
+    else:
+        output = (str(input_file.replace(".csv", ""))"_significance")
 
     data = read_input(input_file)
     expression_data, cmap, norm = data_cleanup(data, tissue_types=tissue_types)
