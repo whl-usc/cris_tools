@@ -282,10 +282,12 @@ def main(args):
     ]
 
     input_file = args.file_path
+    output = args.output
+
     if output:
         output = args.output
     else:
-        output = (str(input_file.replace(".csv", ""))"_significance")
+        output = (str(input_file.replace(".csv", ""))+"_significance")
 
     data = read_input(input_file)
     expression_data, cmap, norm = data_cleanup(data, tissue_types=tissue_types)

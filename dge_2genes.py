@@ -125,7 +125,7 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
     gene_palette = {gene: 'blue' if gene == gene1_name else 'red' 
         for gene in df['gene'].unique()}
     
-    plt.figure(figsize=(min(len(df['tissue_type'].unique()), 16), 8))
+    plt.figure(figsize=(14, 10))
     
     ax = sns.boxplot(
         x='tissue_type', y='expression', data=df, hue='gene', 
@@ -149,14 +149,12 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
         fontsize=12, fontweight='bold')
 
     tissue_types = df['tissue_type'].unique()
+
     x_labels = [
-        f"{tissue_type} "
-        f"({gene1_name}: n={df[(df['tissue_type'] == tissue_type) & "
-        f"(df['gene'] == gene1_name)].shape[0]}, "
-        f"{gene2_name}: n={df[(df['tissue_type'] == tissue_type) & "
-        f"(df['gene'] == gene2_name)].shape[0]})"
+        f"{tissue_type} ({gene1_name}: n={df[(df['tissue_type'] == tissue_type) & (df['gene'] == gene1_name)].shape[0]}, {gene2_name}: n={df[(df['tissue_type'] == tissue_type) & (df['gene'] == gene2_name)].shape[0]})"
         for tissue_type in tissue_types
     ]
+
     ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor', 
         ha='right', fontsize=8)
     ax.set_xlim(-0.75, len(tissue_types) - 0.75)
@@ -221,7 +219,9 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
     )
 
     for i in range(len(tissue_types)):
-        ax.axvspan(i - 0.5, i + 0.5, alpha=0.1, color='lightgray', zorder=-1)
+        if i % 2 ==0:
+            ax.axvspan(i - 0.5, i + 0.5, alpha=0.05, 
+                color='gray', zorder=-1)
 
     output_file = f"{output_prefix}{gene1_name}_{gene2_name}_plot"
     plt.subplots_adjust(bottom=0.1)

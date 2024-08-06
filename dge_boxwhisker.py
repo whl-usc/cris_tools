@@ -211,7 +211,7 @@ def read_input(input_file, phenotype_file, gene_name):
 
 def calc_significance(dataframe):
     """
-    Perform Wilcoxon rank-sum tests between columns with matching names 
+    Perform Mann-Whitney U tests between columns with matching names 
     when stripped of "Normal" or "Tumor". Prints the p-value for each matched 
     pair and summarizes significance based on the p-values.
 
@@ -500,7 +500,7 @@ def plot(dataframe, gene_name, output_prefix='',
         )
         
     # Save the plot as PNG
-    output_file = f"{output_prefix}{gene_name}_plot.png"
+    output_file = f"{output_prefix}{gene_name}_plot"
     plt.subplots_adjust(bottom=0.1)
     plt.tight_layout()
     plt.savefig(f"{output_file}.png", dpi=400)

@@ -112,9 +112,11 @@ def plot_expression_histograms(file_path1, file_path2, output):
     if output:
         outname = str(output)
     else: 
-        outname = str(f"{gene1}_{gene2}_distribution.png")
+        outname = str(f"{gene1}_{gene2}")
 
-    plt.savefig(outname, dpi=400)
+    plt.savefig(f"{outname}_distribution.png", dpi=400)
+    plt.savefig(f"{outname}_distribution.svg", dpi=400)
+
     time = str(datetime.now())[:-7]
     print(f"Plot saved as {outname} on {time}.")
 
