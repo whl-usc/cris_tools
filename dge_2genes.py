@@ -16,7 +16,7 @@ __update_notes__ = """
 1.1.0
     -   Edited for docstrings, styling of plots.
 
-1.0.0   
+1.0.0
     -   Initial commit, set up outline of logic and functions.
 """
 
@@ -67,7 +67,7 @@ def calc_significance(df, gene1_name, gene2_name, placeholder_value=-9999):
         gene1_name (str): Name of the first gene.
         gene2_name (str): Name of the second gene.
         placeholder_value (float): Placeholder value for missing data.
-        
+
     Returns:
         tuple: Dictionaries of p-values and significance levels by tissue type.
     """
@@ -125,8 +125,8 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
     gene_palette = {gene: 'blue' if gene == gene1_name else 'red' 
         for gene in df['gene'].unique()}
     
-    plt.figure(figsize=(14, 10))
-    
+    plt.figure(figsize=(16, 10))
+
     ax = sns.boxplot(
         x='tissue_type', y='expression', data=df, hue='gene', 
             palette=gene_palette,
@@ -157,7 +157,7 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
 
     ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor', 
         ha='right', fontsize=8)
-    ax.set_xlim(-0.75, len(tissue_types) - 0.75)
+    ax.set_xlim(-0.75, len(tissue_types) + 1.25)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -224,8 +224,7 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
                 color='gray', zorder=-1)
 
     output_file = f"{output_prefix}{gene1_name}_{gene2_name}_plot"
-    plt.subplots_adjust(bottom=0.1)
-    plt.tight_layout()
+    plt.tight_layout(pad=5.0)
     plt.savefig(f"{output_file}.png", dpi=400)
     plt.savefig(f"{output_file}.svg", dpi=400)
     plt.close()
