@@ -4,14 +4,17 @@ date:       2024_06_27
 python:     python3.10
 script:     dge_boxwhisker.py
 
-This Python script plots the distribution of log2(x+1) RSEM or DESEQ2
-normalized gene expression counts downloaded from the UCSC Xena web platform.
+This Python script plots the distribution of normalized gene expression 
+counts downloaded from the UCSC Xena web platform.
 """
 # Define version
 __version__ = "2.0.0"
 
 # Version notes
 __update_notes__ = """
+2.1.0
+    -   Relabeling y-axis for different normalization methods.
+
 2.0.0
     -   Edited script to exclude tissues or samples that have no normal to
         tumor comparison. Removed the following tissues:
@@ -380,7 +383,7 @@ def plot(dataframe, gene_name, output_prefix='',
 
     # Plot labels and title for figure
     ax.set_xlabel('', fontsize=8, fontweight='bold')
-    ax.set_ylabel(f'{gene_name} Expression (Log2(x+1) RSEM Normalized Count)',
+    ax.set_ylabel(f'Gene Expression',
         fontsize=8, fontweight='bold')
     ax.set_title(f'{gene_name} Expression by Tissue Type', fontsize=12,
         fontweight='bold')
@@ -391,7 +394,7 @@ def plot(dataframe, gene_name, output_prefix='',
     ax.set_xticklabels([f"{label} (n={counts_dict.get(label, 0)})" 
         for label in x_labels], rotation=45, rotation_mode='anchor', 
             ha='right', fontsize=8)
-    ax.set_xlim(-0.75, num_tissues + 0.75)
+    ax.set_xlim(-0.50, num_tissues + 1.5)
 
     # Remove spines
     ax.spines['top'].set_visible(False)
