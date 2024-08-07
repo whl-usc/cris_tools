@@ -18,18 +18,18 @@ __update_notes__ = """
     
 1.2.1
     -   Statistical comparisons switched to a Mann-Whitney U Test.
-    -   Remove the background coloring for easier viewing.
+    -   Removed the background coloring for easier viewing.
 
 1.2.0
-    -   Break sections into functions.
-    -   Add argument parsing for output file names.
+    -   Broke sections into functions.
+    -   Added argument parsing for output file names.
 
 1.1.0 
-    -   Remove unnecessary comments
-    -   Remove hard-coded paths and replace with argparse logic.
+    -   Removed unnecessary comments.
+    -   Replaced hard-coded paths with argparse logic.
 
 1.0.0
-    -   Initial commit, set up function logic and styling.
+    -   Initial commit; set up function logic and styling.
 """
 
 # Import Packages
@@ -71,7 +71,7 @@ def read_input(file_path):
             columns=['Zero Proportion (%)'])
         zero_counts_df['Zero Proportion (%)'] = (
             zero_counts_df['Zero Proportion (%)'].map('{:.2f}'.format))
-        print(f"Warning: These tissue types have '0' values exceeding 50% of "
+        print(f"Warning: These tissue types have '0' values exceeding 50% of"
             "total counts:")
         print(zero_counts_df)
 
@@ -85,10 +85,11 @@ def data_cleanup(dataframe, tissue_types, norm_source):
     Args:
         dataframe (pd.DataFrame): DataFrame containing the gene expression data.
         tissue_types (list of str): List of tissue types to process.
+        norm_source (str): The normalization method used ('RSEM' or 'TPM').
 
     Returns:
-        tuple: A tuple containing the DataFrame with fold change and
-        significance, colormap, and normalization instance for fold change.
+        tuple: A tuple containing the DataFrame with fold change, significance,
+               colormap, and normalization instance for fold change.
     """
     relative_expression = []
 
@@ -111,6 +112,8 @@ def data_cleanup(dataframe, tissue_types, norm_source):
         elif norm_source == "RSEM":
             normal_original = (2**normal_cleaned - 1)
             tumor_original = (2**tumor_cleaned - 1)
+        else:
+            raise ValueError(f"Unknown normalization method: {norm_source}")
 
         # Calculate means and log2 fold change
         mean_normal = np.mean(normal_original)
@@ -123,7 +126,7 @@ def data_cleanup(dataframe, tissue_types, norm_source):
             fold_change_log2 = np.log2(mean_tumor / mean_normal)
 
             # Perform Mann-Whitney U test
-            _, p_value = mannwhitneyu(normal_original, tumor_original,
+            _, p_value = mannwhitneyu(normal_original, tumor_original, 
                 alternative='two-sided')
 
         # Calculate -log10(p-value)
@@ -140,7 +143,7 @@ def data_cleanup(dataframe, tissue_types, norm_source):
             significance = ''
 
         # Append results
-        relative_expression.append([tissue_type, fold_change_log2, 
+        relative_expression.append([tissue_type, fold_change_log2,
             neg_log_p_value, significance])
 
     # Convert to DataFrame for plotting
@@ -155,9 +158,6 @@ def data_cleanup(dataframe, tissue_types, norm_source):
 
     # Define color map and norm for fold change
     cmap = plt.get_cmap('coolwarm')
-    # norm = Normalize(vmin=expression_data['Fold Change (log2)'].min(),
-    #                  vmax=expression_data['Fold Change (log2)'].max(),
-    #                  clip=True)
     norm = Normalize(vmin=-5, vmax=5, clip=True)
     
     return expression_data, cmap, norm
@@ -165,22 +165,16 @@ def data_cleanup(dataframe, tissue_types, norm_source):
 def plot(expression_data, cmap, norm, output_file):
     """
     Generate and save a bar plot summarizing fold change and significance.
-    """
-    # Define tissue types
-    tissue_types = [
-        'Adrenal Gland', 'Bile Duct', 'Bladder', 'Brain', 'Breast',
-        'Cervix', 'Colon', 'Esophagus', 'Head And Neck', 'Kidney',
-        'Liver', 'Lung', 'Ovary', 'Pancreas', 'Prostate', 'Rectum',
-        'Skin', 'Stomach', 'Testis', 'Thyroid', 'Uterus'
-    ]
 
+    Args:
+        expression_data (pd.DataFrame): DataFrame containing fold change,
+            significance data.
+        cmap (matplotlib.colors.Colormap): Colormap for the plot.
+        norm (matplotlib.colors.Normalize): Normalization instance for the plot.
+        output_file (str): Base name for saving the plot images.
+    """
     # Set up figure and axes
     fig, ax = plt.subplots(figsize=(12, 3))
-
-    # # Plot alternating background colors
-    # for i, tissue_type in enumerate(tissue_types):
-    #     if i % 2 == 0:
-    #         ax.axvspan(i - 0.5, i + 0.5, facecolor='lightgray', alpha=0.20)
 
     # Plot small boxes with color representing fold change
     sns.scatterplot(
@@ -198,15 +192,23 @@ def plot(expression_data, cmap, norm, output_file):
 
     # Add color bar for fold change
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', 
-        fraction=0.005, pad=0)
+    cbar = plt.colorbar(sm, 
+        ax=ax, 
+        orientation='vertical', 
+        fraction=0.005, 
+        pad=0)
     cbar.set_label('Fold Change (log2)')
 
     # Annotate significance stars above each marker
     for index, row in expression_data.iterrows():
-        ax.text(index, 0.05,
-                row['Stars'],
-                ha='center', va='bottom', fontsize=12, color='black')
+        ax.text(
+            index, 
+            0.05, 
+            row['Stars'], 
+            ha='center', 
+            va='bottom', 
+            fontsize=12, 
+            color='black')
 
     # Plot labels and title for figure
     ax.set_xlabel('Tissue Type')
@@ -218,7 +220,7 @@ def plot(expression_data, cmap, norm, output_file):
     # Set x-tick labels with counts
     x_labels = expression_data['Tissue Type']
     ax.set_xticks(range(len(x_labels)))
-    ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor', 
+    ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor',
         ha='right', fontsize=8)
 
     # Remove y-axis ticks and spines
@@ -256,23 +258,24 @@ NOTE: The input and output strings are positional.
 1. input_file:      Input file (.csv) structured with tissue types as columns
                     and expression count values as new rows for every gene.
 
-2. -o, --output     An output file name, defaults to "significance.png".
+2. -n, --normalization  Normalization method used on the raw data. Required. 
+                         Accepts "RSEM" or "TPM".
+
+3. -o, --output     An output file name, defaults to "significance.png".
 ###########################################################################
 """),
-    usage=
-"""
-    \npython3 %(prog)s input_file output
-""")
+        usage="\npython3 %(prog)s input_file output"
+    )
     parser.add_argument(
         'file_path', type=str,
         help='Path to the CSV file containing gene expression data.')
     parser.add_argument(
-        '-n', '--normalization',
-        help='Normalization method used on the raw data. "RSEM" or "TPM"')
+        '-n', '--normalization', required=True,
+        help='Normalization method used on the raw data. "RSEM" or "TPM".')
     parser.add_argument(
         '-o', '--output', type=str, 
         default='significance.png',
-        help='Filename for saving the plot (default: "significance.png.")')
+        help='Filename for saving the plot (default: "significance.png").')
 
     return parser.parse_args()
 
@@ -294,13 +297,8 @@ def main(args):
     normalization = args.normalization
     output = args.output
 
-    if output:
-        output = args.output
-    else:
-        output = (str(input_file.replace(".csv", ""))+"_significance")
-
     data = read_input(input_file)
-    expression_data, cmap, norm = data_cleanup(data, tissue_types=tissue_types, 
+    expression_data, cmap, norm = data_cleanup(data, tissue_types, 
         normalization)
     plot(expression_data, cmap, norm, output)
 
