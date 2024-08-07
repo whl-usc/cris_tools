@@ -270,8 +270,8 @@ def main(args):
     """
     gene1_file = args.file_path1
     gene2_file = args.file_path2
-    gene1 = gene1_file.replace(".csv", "")
-    gene2 = gene2_file.replace(".csv", "")
+    gene1 = gene1_file.replace(".csv", "").replace("_TPM", "").replace("_RSEM", "")
+    gene2 = gene2_file.replace(".csv", "").replace("_TPM", "").replace("_RSEM", "")
 
     tumor_data1, tumor_data2 = read_input(gene1_file, gene2_file)
     plot(tumor_data1, tumor_data2, gene1, gene2, 

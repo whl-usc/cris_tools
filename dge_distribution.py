@@ -74,10 +74,10 @@ def plot_expression_histograms(file_path1, file_path2, output):
     tumor_data1 = filter_tumor_columns(data1, tissue_types)
     tumor_data2 = filter_tumor_columns(data2, tissue_types)
 
-    gene1 = file_path1.replace("RSEM_", "").replace("DSEQ2_", 
-        "").replace(".csv", "")
-    gene2 = file_path2.replace("RSEM_", "").replace("DSEQ2_", 
-        "").replace(".csv", "")
+    gene1 = file_path1.replace("_RSEM", "").replace("_DSEQ2", 
+        "").replace("_TPM", "").replace(".csv", "")
+    gene2 = file_path2.replace("_RSEM", "").replace("_DSEQ2", 
+        "").replace("_TPM", "").replace(".csv", "")
 
     melted_data1 = tumor_data1.melt(var_name='Tissue', 
         value_name='Expression Count').dropna()
@@ -98,7 +98,7 @@ def plot_expression_histograms(file_path1, file_path2, output):
         color='black', label=gene2, alpha=0.75)
     sns.despine()
     plt.title('Gene Expression Counts (Tumor Samples)')
-    plt.xlabel('Gene Expression (log2(x+1) Count)')
+    plt.xlabel('Gene Expression (Normalized Count)')
     plt.ylabel('Frequency (Number of Samples)')
     plt.legend()
 
@@ -118,7 +118,7 @@ def plot_expression_histograms(file_path1, file_path2, output):
     plt.savefig(f"{outname}_distribution.svg", dpi=400)
 
     time = str(datetime.now())[:-7]
-    print(f"Plot saved as {outname} on {time}.")
+    print(f"Plot saved as {outname}_distribution on {time}.")
 
 def parse_args():
     """

@@ -264,7 +264,7 @@ NOTE: The input and output strings are positional.
 3. -o, --output     An output file name, defaults to "significance.png".
 ###########################################################################
 """),
-        usage="\npython3 %(prog)s input_file output"
+        usage="\npython3 %(prog)s input_file -normalization -output"
     )
     parser.add_argument(
         'file_path', type=str,
