@@ -4,7 +4,7 @@ date:       2024_08_06
 python:     python3.10
 script:     dge_2genes.py
 
-This Python script compares the distribution of log2(x+1) RSEM normalized data
+This Python script compares the distribution of normalized data
 between two genes by plotting.
 """
 
@@ -143,7 +143,7 @@ def plot(dataframe1, dataframe2, gene1_name, gene2_name, output_prefix='',
     )
 
     ax.set_xlabel('', fontsize=8, fontweight='bold')
-    ax.set_ylabel(f'Gene Expression (Log2(x+1) RSEM Normalized Count)', 
+    ax.set_ylabel(f'Gene Expression', 
         fontsize=8, fontweight='bold')
     ax.set_title(f'{gene1_name} and {gene2_name} Expression by Tissue Type',
         fontsize=12, fontweight='bold')

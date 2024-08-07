@@ -4,16 +4,18 @@ date:       2024_08_02
 python:     python3.10
 script:     dge_barplot.py
 
-This Python script summarizes fold change significance of log2(x+1) RSEM or
-DESEQ2 normalized gene expression counts downloaded from the UCSC Xena web 
-platform.
+This Python script summarizes fold change significance of normalized gene
+expression counts downloaded from the UCSC Xena web platform.
 """
 
 # Define version
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 # Version notes
 __update_notes__ = """
+1.3.0
+    -   Updated the data comprehension to include adjusting for normalization.
+    
 1.2.1
     -   Statistical comparisons switched to a Mann-Whitney U Test.
     -   Remove the background coloring for easier viewing.
@@ -75,7 +77,7 @@ def read_input(file_path):
 
     return data
 
-def data_cleanup(dataframe, tissue_types):
+def data_cleanup(dataframe, tissue_types, norm_source):
     """
     Clean and process the gene expression data to calculate fold change and
     significance for each tissue type.
@@ -103,8 +105,12 @@ def data_cleanup(dataframe, tissue_types):
         tumor_cleaned = combined_data['Tumor'].dropna()
 
         # Convert log2 values back to original scale
-        normal_original = (2**normal_cleaned - 1)
-        tumor_original = (2**tumor_cleaned - 1)
+        if norm_source == "TPM":
+            normal_original = (2**normal_cleaned - 0.001)
+            tumor_original = (2**tumor_cleaned - 0.001)
+        elif norm_source == "RSEM":
+            normal_original = (2**normal_cleaned - 1)
+            tumor_original = (2**tumor_cleaned - 1)
 
         # Calculate means and log2 fold change
         mean_normal = np.mean(normal_original)
@@ -261,6 +267,9 @@ NOTE: The input and output strings are positional.
         'file_path', type=str,
         help='Path to the CSV file containing gene expression data.')
     parser.add_argument(
+        '-n', '--normalization',
+        help='Normalization method used on the raw data. "RSEM" or "TPM"')
+    parser.add_argument(
         '-o', '--output', type=str, 
         default='significance.png',
         help='Filename for saving the plot (default: "significance.png.")')
@@ -282,6 +291,7 @@ def main(args):
     ]
 
     input_file = args.file_path
+    normalization = args.normalization
     output = args.output
 
     if output:
@@ -290,7 +300,8 @@ def main(args):
         output = (str(input_file.replace(".csv", ""))+"_significance")
 
     data = read_input(input_file)
-    expression_data, cmap, norm = data_cleanup(data, tissue_types=tissue_types)
+    expression_data, cmap, norm = data_cleanup(data, tissue_types=tissue_types, 
+        normalization)
     plot(expression_data, cmap, norm, output)
 
 if __name__ == "__main__":
