@@ -114,7 +114,7 @@ def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
                 plt.vlines(time, ymin=survival_prob - tick_length, ymax=survival_prob + tick_length,
                            color=color, linestyle='-', alpha=1, linewidth=1)
 
-    plt.figure(figsize=(6, 6))
+    plt.figure(figsize=(4, 4))
     
     high_group = data[data.iloc[:, 4] == 'high']
     low_group = data[data.iloc[:, 4] == 'low']
@@ -153,20 +153,20 @@ def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
             f'High Expression (n={high_group.shape[0]})\n'
             f'Low Expression (n={low_group.shape[0]})'
         )
-        plt.legend(handles=[high_line, low_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(0.95, 1.0))
+        plt.legend(handles=[high_line, low_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(1.0, 1.0))
     else:
         legend_title = (
             f'\nHigh Expression (n={high_group.shape[0]})'
         )
-        plt.legend(handles=[high_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(0.95, 1.0))
+        plt.legend(handles=[high_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(1.0, 1.0))
 
     # Add custom text for legend
     plt.draw()
     legend_bbox = plt.gca().get_legend().get_window_extent().transformed(plt.gcf().transFigure.inverted())
-    plt.text(legend_bbox.x0 + 0.06, legend_bbox.y0 + 0.08,
+    plt.text(legend_bbox.x0 + 0.355, legend_bbox.y0 + 0.08,
              legend_title,
-             fontsize='8', linespacing=1.15,
-             verticalalignment='top', horizontalalignment='left',
+             fontsize='8', linespacing=1.5,
+             verticalalignment='top', horizontalalignment='right',
              transform=plt.gcf().transFigure)
 
     plt.tight_layout()
@@ -199,7 +199,7 @@ def plot_survival_map(data, filename):
     norm = Normalize(vmin=-1.5, vmax=1.5, clip=True)
 
     # Set up figure and axes
-    fig, ax = plt.subplots(figsize=(12, 3))
+    fig, ax = plt.subplots(figsize=(10, 3))
 
     # Plot scatter plot with color representing hazard ratio
     sns.scatterplot(
