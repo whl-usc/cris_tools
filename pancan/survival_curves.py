@@ -8,7 +8,7 @@ This Python script plots the survival curve data and determines the
 p-value and Log-rank test statistics for data retrieved from the UCSC Xena web platform.
 """
 # Define version
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 # Version notes
 __update_notes__ = """
@@ -110,9 +110,9 @@ def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
         for time in event_times:
             if time in survival_probs.index:
                 survival_prob = survival_probs.loc[time].values[0]
-                tick_length = 0.01
+                tick_length = 0.025
                 plt.vlines(time, ymin=survival_prob - tick_length, ymax=survival_prob + tick_length,
-                           color=color, linestyle='-', alpha=1, linewidth=1)
+                           color=color, linestyle='-', alpha=1, linewidth=0.5)
 
     plt.figure(figsize=(4, 4))
     
@@ -125,11 +125,11 @@ def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
 
     if plot_high:
         plot_group(high_group, 'High Expression', colors['high'])
-        high_line = mlines.Line2D([], [], color=colors['high'], linestyle='-', linewidth=2, label='High Expression')
+        high_line = mlines.Line2D([], [], color=colors['high'], linestyle='-', linewidth=1, label='High Expression')
     
     if plot_low:
         plot_group(low_group, 'Low Expression', colors['low'])
-        low_line = mlines.Line2D([], [], color=colors['low'], linestyle='-', linewidth=2, label='Low Expression')
+        low_line = mlines.Line2D([], [], color=colors['low'], linestyle='-', linewidth=1, label='Low Expression')
 
     if plot_low and plot_high:
         results = logrank_test(high_group['OS.time'], low_group['OS.time'],
