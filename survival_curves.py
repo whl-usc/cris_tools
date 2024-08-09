@@ -12,6 +12,9 @@ __version__ = "1.0.0"
 
 # Version notes
 __update_notes__ = """
+2.0.0
+    -   Added plotting survival curve function.
+
 1.0.0
     -   Initial commit, set up outline of logic and functions.
 """
@@ -20,10 +23,14 @@ __update_notes__ = """
 from datetime import datetime
 from lifelines import KaplanMeierFitter, CoxPHFitter
 from lifelines.statistics import logrank_test
+from matplotlib.colors import Normalize
 import argparse
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+import numpy as np
+import os
 import pandas as pd
+import seaborn as sns
 
 def read_input(file_path):
     """
@@ -37,26 +44,45 @@ def read_input(file_path):
     """
     data = pd.read_csv(file_path, sep='\t')
     # Rename columns based on the mapping
-    data.columns = ['col_0', 'col_1', 'OS', 'OS.time', 'col_4', 'data']
+    data.columns = ['col_0', 'col_1', 'OS', 'OS.time', 'median_group', 'data']
     data[['OS.time', 'OS', 'data']] = data[['OS.time', 'OS', 'data']].apply(pd.to_numeric, errors='coerce')
 
     return data
 
 def calculate_hazard_ratios(data):
     """
-    Calculate Hazard Ratios using Cox Proportional-Hazards Model.
+    Calculate Hazard Ratios using Cox Proportional-Hazards Model, ensuring 'high' is always compared to 'low'.
 
     Args:
         data (pd.DataFrame): DataFrame containing survival and gene expression data.
-    """
-    cph = CoxPHFitter()
-    cph.fit(data[['OS.time', 'OS', 'data']], duration_col='OS.time', event_col='OS')
-    summary = cph.summary
 
-    # Extract hazard ratios and p-values
-    hazard_ratio = summary.loc['data', 'exp(coef)']
-    hr_p_values = summary.loc['data', 'p']
+    Returns:
+        tuple: Hazard ratio and p-value, or (None, None) if computation is not possible.
+    """
     
+    # Check if 'high' and 'low' groups are present
+    if 'high' not in data['median_group'].values or 'low' not in data['median_group'].values:
+        print("Dataset must contain both 'high' and 'low' groups for comparison.")
+        return None, None
+    
+    # Encode 'median_group' with 'low' as the reference category
+    data_encoded = pd.get_dummies(data['median_group'], drop_first=False, prefix='median_group')
+    data_encoded = data.join(data_encoded)
+    
+    cph = CoxPHFitter()
+    
+    try:
+        cph.fit(data_encoded[['OS.time', 'OS', 'median_group_high']], duration_col='OS.time', event_col='OS')
+        summary = cph.summary
+        
+        # Extract hazard ratios and p-values
+        hazard_ratio = summary.loc['median_group_high', 'exp(coef)']
+        hr_p_values = summary.loc['median_group_high', 'p']
+        
+    except KeyError as e:
+        print(f"Error fitting the model: {e}")
+        return None, None
+
     return hazard_ratio, hr_p_values
 
 def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
@@ -130,7 +156,7 @@ def plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename):
         plt.legend(handles=[high_line, low_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(0.95, 1.0))
     else:
         legend_title = (
-            f'High Expression (n={high_group.shape[0]})'
+            f'\nHigh Expression (n={high_group.shape[0]})'
         )
         plt.legend(handles=[high_line], loc='upper right', frameon=False, fontsize='8', bbox_to_anchor=(0.95, 1.0))
 
@@ -160,24 +186,24 @@ def plot_survival_map(data, filename):
                              'cancer', 'hazard_ratio', and 'p-value'.
         filename (str): Output file name for the plot.
     """
-    # Calculate -log10(p-value) and assign significance stars
-    data['neg_log_p_value'] = -np.log10(data['p-value'])
-    data['neg_log_p_value'] = data['neg_log_p_value'].where(data['p-value'] <= 0.05, 0)
+    data['cancer_type'] = data['cancer_type'].str.upper()
 
-    data['significance'] = data['p-value'].apply(
+    # Calculate -log10(p-value) and assign significance stars
+    data['log_hazard_ratio'] = np.log10(data['hazard_ratio'])
+    data['significance'] = data['p_value'].apply(
         lambda p: '***' if p <= 0.001 else '**' if p <= 0.01 else '*' if p <= 0.05 else ''
     )
 
     # Define color map and normalization for hazard ratio
     cmap = plt.get_cmap('coolwarm')
-    norm = Normalize(vmin=data['hazard_ratio'].min(), vmax=data['hazard_ratio'].max(), clip=True)
+    norm = Normalize(vmin=-1.5, vmax=1.5, clip=True)
 
     # Set up figure and axes
     fig, ax = plt.subplots(figsize=(12, 3))
 
     # Plot scatter plot with color representing hazard ratio
     sns.scatterplot(
-        x='cancer',
+        x='cancer_type',
         y=0,
         hue='hazard_ratio',
         palette=cmap,
@@ -208,12 +234,12 @@ def plot_survival_map(data, filename):
 
     # Plot labels and title for the figure
     ax.set_xlabel('Cancer Type')
-    ax.set_ylabel('-log$_{10}$(HR)')
+    ax.set_ylabel('log$_{10}$(HR)')
     ax.set_ylim(-0.2, 0.2)
     ax.set_title('Survival Map by Cancer Code', fontsize=10, fontweight='bold')
 
     # Set x-tick labels with counts
-    x_labels = data['cancer']
+    x_labels = data['cancer_type']
     ax.set_xticks(range(len(x_labels)))
     ax.set_xticklabels(x_labels, rotation=45, rotation_mode='anchor', ha='right', fontsize=8)
 
@@ -251,6 +277,7 @@ def parse_args():
         help='Path to the TSV file containing gene expression and survival data.')
     parser.add_argument(
         '-map', '--survival_map',
+        action='store_true',
         help='Flag to call on the survival mapping function based on p-values.')
 
     return parser.parse_args()
@@ -262,29 +289,30 @@ def main(args):
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
     """
-    data = read_input(args.file_path)
     filename = (args.file_path).replace(".tsv", "")
-    hazard_ratio, hr_p_values = calculate_hazard_ratios(data)
-    
-    df = pd.DataFrame({
-        'Hazard Ratio': [hazard_ratio],
-        'p-value': [hr_p_values]
-    })
-    
-    # Check if file exists and append or create
-    summary_file = "survival_summary.tsv"
-    if os.path.exists(summary_file):
-        df.to_csv(summary_file, mode='a', header=False, index=False, sep='\t')
-    else:
-        df.to_csv(summary_file, mode='w', header=True, index=False, sep='\t')
 
-    plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename)
-
-    if args.survival_map:
+    if not args.survival_map:
         data = read_input(args.file_path)
-        plot_surivival_map(data, filename)
+        hazard_ratio, hr_p_values = calculate_hazard_ratios(data)
+        
+        df = pd.DataFrame({
+            'cancer_type': [filename],
+            'p_value': [hr_p_values],
+            'hazard_ratio': [hazard_ratio]
+        })
+        
+        # Check if file exists and append or create
+        summary_file = "survival_summary.tsv"
+        if os.path.exists(summary_file):
+            df.to_csv(summary_file, mode='a', header=False, index=False, sep='\t')
+        else:
+            df.to_csv(summary_file, mode='w', header=True, index=False, sep='\t')
+
+        plot_kaplan_meier_curve(data, hazard_ratio, hr_p_values, filename)
+
     else:
-        pass
+        data = pd.read_csv(args.file_path, sep='\t')
+        plot_survival_map(data, filename)
 
 if __name__ == "__main__":
     args = parse_args()
