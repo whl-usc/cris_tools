@@ -1,3 +1,24 @@
+"""
+contact:    wlee9829@gmail.com
+date:       2024_09_05
+python:     python3.10
+script:     tRF_heatmap.py
+
+This script is a modified version of the tRF_heatmap.py script
+used to plot a heatmap of tRF positions using MINTbase data.
+
+input file: 4 lines for each record: seq, datasets, maxRPM, hidetRF
+    TTGGTGGTTCAGTGGT
+59
+5.754
+hide tRF
+
+output file: heatmap, plot of maxRPM on a matrix of tRNA start x tRNA end.
+
+example command:
+python3 tRF_heatmap.py tRNA-Gly-CCC-1-1_MINTbase.txt 1 none png
+"""
+
 # Import Packages
 from textwrap import dedent
 import argparse
@@ -21,20 +42,29 @@ def read_input(file_path, log2scale=False):
         dict: Dictionary with (start_pos, end_pos) as keys and maxRPM as values.
         int: Length of RNA sequences.
     """
-    with open(file_path, 'r') as infile:
-        lines = infile.readlines()
-
-    records = [lines[n:n+4] for n in range(0, len(lines), 4)]
-
     position_rpm = {}
     max_RNA_length = 0
+
+    try:
+        with open(file_path, 'r') as infile:
+            lines = infile.readlines()
+    except IOError as e:
+        print(f"Error reading file {file_path}: {e}")
+        raise
+
+    records = [lines[n:n+4] for n in range(0, len(lines), 4)]
 
     for record in records:
         sequence = record[0].strip()
         if not sequence:
             continue
 
-        maxRPM = float(record[2].strip())
+        try:
+            maxRPM = float(record[2].strip())
+        except ValueError:
+            print(f"Invalid RPM value in record: {record[2].strip()}")
+            continue
+
         start_pos = len(re.match(r"^(\s*)", record[0]).group(0)) + 1
         end_pos = start_pos + len(sequence) - 1
 
@@ -56,7 +86,7 @@ def read_input(file_path, log2scale=False):
 
     return position_rpm, max_RNA_length
 
-def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, title):
+def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, output_extension, title):
     """
     Plot a heatmap with start positions on the x-axis and end positions on the y-axis.
 
@@ -65,6 +95,7 @@ def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, title):
         RNAlen (int): Length of RNA sequences.
         log2scale (bool): Whether the data is log2 transformed.
         output_file (str): Base name for the output file.
+        output_extension (str): File extension for the output file.
         title (str): Title of the heatmap.
     """
     # Initialize an empty matrix of zeros
@@ -118,9 +149,12 @@ def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, title):
 
     # Save the heatmap plot
     plt.tight_layout()
-    plt.savefig(f"{output_file}_heatmap{'_log2' if log2scale else ''}.png", dpi=300)
+    try:
+        plt.savefig(f"{output_file}_heatmap{'_log2' if log2scale else ''}.{output_extension}", dpi=300)
+    except Exception as e:
+        print(f"Error saving plot: {e}")
     plt.close()
-    print(f"Plot saved as {output_file}_heatmap{'_log2' if log2scale else ''}.png")
+    print(f"Plot saved as {output_file}_heatmap{'_log2' if log2scale else ''}.{output_extension}")
 
 def parse_args():
     """
@@ -130,7 +164,7 @@ def parse_args():
         argparse.Namespace: Parsed arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Plot heatmap of tRF positions using MINTbase data."
+        description="Plot heatmap of tRF positions using MINTbase data.\nWARNING: Arguments are positional."
     )
     parser.add_argument(
         'file_path', type=str,
@@ -138,12 +172,18 @@ def parse_args():
     )
     parser.add_argument(
         'log2scale', type=int,
+        choices=[1, 0],
         help='Perform log2 transformation: 1 for yes, 0 for no.'
     )
     parser.add_argument(
         'output_file', type=str, nargs='?',
         default=None,
-        help='Base filename for saving the plots. If not provided, a default name will be generated.'
+        help='Base filename for saving the plots. If not provided (or if input is "none" or "n"), a default name will be generated.'
+    )
+    parser.add_argument(
+        'extension', type=str, default='png',
+        choices=['png', 'pdf', 'svg', 'jpeg'],
+        help='File extension for the output plot. Default is png.'
     )
     return parser.parse_args()
 
@@ -158,13 +198,10 @@ def main():
     position_rpm, RNAlen = read_input(args.file_path, log2scale)
 
     # Generate default output file name if not provided
-    if args.output_file is None:
+    if args.output_file is None or 'none' in args.output_file.lower() or 'n' in args.output_file.lower():
         base_name = os.path.basename(args.file_path)
-        try:
-            base_name = base_name.replace('tRNA-', '').replace('_MINTbase.txt', '')
-            output_file = base_name
-        except:
-            output_file = base_name[0]
+        name, _ = os.path.splitext(base_name)
+        output_file = name.replace('tRNA-', '').replace('_MINTbase', '')
     else:
         output_file = args.output_file
     
@@ -172,7 +209,7 @@ def main():
     title = output_file
     
     # Plot heatmap with start and end RPM values
-    plot_heatmap(position_rpm, RNAlen, log2scale, output_file, title)
+    plot_heatmap(position_rpm, RNAlen, log2scale, output_file, args.extension, title)
 
 if __name__ == "__main__":
     main()
