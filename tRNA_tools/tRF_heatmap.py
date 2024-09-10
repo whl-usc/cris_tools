@@ -39,7 +39,7 @@ def read_input(file_path, log2scale=False):
         log2scale (bool): Whether to apply log2 transformation.
 
     Returns:
-        dict: Dictionary with (start_pos, end_pos) as keys and maxRPM as values.
+        dict: Dictionary with (start_pos, end_pos) as keys, and a tuple (maxRPM, sequence) as values.
         int: Length of RNA sequences.
     """
     position_rpm = {}
@@ -70,21 +70,40 @@ def read_input(file_path, log2scale=False):
 
         max_RNA_length = max(max_RNA_length, len(record[0]))
 
-        # Add the RPM value to the appropriate (start, end) pair
+        # Add the RPM value and sequence to the appropriate (start, end) pair
         if (start_pos, end_pos) not in position_rpm:
-            position_rpm[(start_pos, end_pos)] = 0
-        position_rpm[(start_pos, end_pos)] += maxRPM
+            position_rpm[(start_pos, end_pos)] = (0, sequence)
+        current_rpm, _ = position_rpm[(start_pos, end_pos)]
+        position_rpm[(start_pos, end_pos)] = (current_rpm + maxRPM, sequence)
 
     # Apply log2 scaling if needed
     if log2scale:
         for key in position_rpm:
-            if position_rpm[key] > 0:
-                position_rpm[key] = math.log2(position_rpm[key])
+            current_rpm, sequence = position_rpm[key]
+            if current_rpm > 0:
+                position_rpm[key] = (math.log2(current_rpm), sequence)
 
     # Print example data for verification
-    print(f"Max RNA length: {max_RNA_length}")
+    print(f"tRNA total length: {max_RNA_length}")
 
     return position_rpm, max_RNA_length
+
+def output_top_rpm_positions(position_rpm, top_n=20): # top_n can be changed, if needed.
+    """
+    Output the top N RPM positions.
+
+    Args:
+        position_rpm (dict): Dictionary with (start_pos, end_pos) as keys, and a tuple (maxRPM, sequence) as values.
+        top_n (int): Number of top RPM positions to output.
+    """
+    # Sort positions by RPM value in descending order
+    sorted_positions = sorted(position_rpm.items(), key=lambda x: x[1][0], reverse=True)
+    
+    # Print top N RPM positions
+    print(f"\nTop {top_n} RPM positions:")
+    for i, ((start_pos, end_pos), (rpm, sequence)) in enumerate(sorted_positions[:top_n], 1):
+        seq_length = end_pos - start_pos + 1
+        print(f"{i})\t Start: {start_pos} \tEnd: {end_pos} \tLength: {seq_length} \tRPM: {rpm:.3f} \tSequence: {sequence}")
 
 def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, output_extension, title):
     """
@@ -102,7 +121,7 @@ def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, output_extension,
     matrix = np.zeros((RNAlen, RNAlen))
     
     # Populate the matrix with maxRPM values from the dictionary
-    for (start_pos, end_pos), maxRPM in position_rpm.items():
+    for (start_pos, end_pos), (maxRPM, sequence) in position_rpm.items():
         if 1 <= start_pos <= RNAlen and 1 <= end_pos <= RNAlen:
             matrix[end_pos, start_pos] = maxRPM
     
@@ -196,6 +215,9 @@ def main():
     
     # Read input and get RPM values for start and end positions
     position_rpm, RNAlen = read_input(args.file_path, log2scale)
+
+    # Output top RPM positions
+    output_top_rpm_positions(position_rpm)
 
     # Generate default output file name if not provided
     if args.output_file is None or 'none' in args.output_file.lower() or 'n' in args.output_file.lower():
