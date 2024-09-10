@@ -88,7 +88,7 @@ def read_input(file_path, log2scale=False):
 
     return position_rpm, max_RNA_length
 
-def output_top_rpm_positions(position_rpm, top_n=20): # top_n can be changed, if needed.
+def output_top_rpm_positions(position_rpm, top_n=20, log2scale=False): # top_n can be changed, if needed.
     """
     Output the top N RPM positions.
 
@@ -103,7 +103,8 @@ def output_top_rpm_positions(position_rpm, top_n=20): # top_n can be changed, if
     print(f"\nTop {top_n} RPM positions:")
     for i, ((start_pos, end_pos), (rpm, sequence)) in enumerate(sorted_positions[:top_n], 1):
         seq_length = end_pos - start_pos + 1
-        print(f"{i})\t Start: {start_pos} \tEnd: {end_pos} \tLength: {seq_length} \tRPM: {rpm:.3f} \tSequence: {sequence}")
+        rpm_label = 'Log2_RPM' if log2scale else 'RPM'
+        print(f"{i})\t Start: {start_pos} \tEnd: {end_pos} \tLength: {seq_length} \t{rpm_label}: {rpm:.3f} \tSequence: {sequence}")
 
 def plot_heatmap(position_rpm, RNAlen, log2scale, output_file, output_extension, title):
     """
@@ -217,7 +218,7 @@ def main():
     position_rpm, RNAlen = read_input(args.file_path, log2scale)
 
     # Output top RPM positions
-    output_top_rpm_positions(position_rpm)
+    output_top_rpm_positions(position_rpm, log2scale=log2scale)
 
     # Generate default output file name if not provided
     if args.output_file is None or 'none' in args.output_file.lower() or 'n' in args.output_file.lower():
