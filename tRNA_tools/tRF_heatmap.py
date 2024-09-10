@@ -160,8 +160,11 @@ def main():
     # Generate default output file name if not provided
     if args.output_file is None:
         base_name = os.path.basename(args.file_path)
-        base_name = base_name.replace('tRNA-', '').replace('_MINTbase.txt', '')
-        output_file = base_name
+        try:
+            base_name = base_name.replace('tRNA-', '').replace('_MINTbase.txt', '')
+            output_file = base_name
+        except:
+            output_file = base_name[0]
     else:
         output_file = args.output_file
     
